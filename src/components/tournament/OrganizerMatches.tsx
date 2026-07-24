@@ -233,7 +233,7 @@ export default function OrganizerMatches() {
                 courts: data.courts || [], matches: data.matches || [],
               }))
           }} className="border-emerald-600 text-emerald-300 hover:bg-emerald-800">
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+            <RefreshCw className="h-4 w-4 mr-1" /> Actualizar
           </Button>
         </div>
       </header>

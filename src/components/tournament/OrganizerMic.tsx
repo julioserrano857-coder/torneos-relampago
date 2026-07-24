@@ -3,24 +3,80 @@
 import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ArrowLeft, Mic, Volume2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, Mic, Volume2, Loader2, Trophy } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function OrganizerMic() {
   const store = useTournamentStore()
-  const { matches, courts } = store
+  const searchParams = useSearchParams()
+  const { matches, courts, tournament } = store
   const [now, setNow] = useState(new Date())
+  const [loaded, setLoaded] = useState(false)
 
+  const loadData = useCallback(async () => {
+    const tournamentId = searchParams.get('t') || store.selectedTournamentId
+    if (!tournamentId) return
+
+    store.setSelectedTournamentId(tournamentId)
+
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}`)
+      if (res.ok) {
+        const data = await res.json()
+        store.setTournamentData({
+          tournament: data,
+          teams: data.teams || [],
+          courts: data.courts || [],
+          matches: data.matches || [],
+        })
+      }
+    } catch {
+      toast.error('Error al cargar')
+    }
+    setLoaded(true)
+  }, [searchParams, store])
+
+  useEffect(() => { loadData() }, []) // eslint-disable-line
+
+  // Reloj en vivo
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Auto-refresh cada 15s
+  useEffect(() => {
+    const interval = setInterval(() => loadData(), 15000)
+    return () => clearInterval(interval)
+  }, [loadData])
 
   const playingMatches = matches.filter(m => m.status === 'playing')
   const readyMatches = matches
     .filter(m => m.status === 'pending' && m.homeTeamId && m.awayTeamId && !m.courtId)
     .sort((a, b) => a.round - b.round || a.matchNumber - b.matchNumber)
     .slice(0, 5)
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-950 via-gray-950 to-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 text-red-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!tournament) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-950 via-gray-950 to-black flex items-center justify-center">
+        <div className="text-center">
+          <Trophy className="h-16 w-16 text-red-700 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white">No hay torneo seleccionado</h2>
+          <p className="text-red-400 text-sm mt-2">Seleccioná un torneo desde el panel</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-950 via-gray-950 to-black">
@@ -69,7 +125,7 @@ export default function OrganizerMic() {
                     <CardContent className="p-6">
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-red-400 font-bold text-lg">{court?.name || `Cancha ${match.courtId?.slice(-2)}`}</span>
+                        <span className="text-red-400 font-bold text-lg">{court?.name || 'Cancha'}</span>
                       </div>
                       <div className="bg-black/30 rounded-xl p-6 text-center">
                         <div className="flex items-center justify-center gap-6">

@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/crear', label: 'Nuevo Torneo', icon: Plus },
   { href: '/dashboard/partidos', label: 'Partidos', icon: Swords },
   { href: '/dashboard/canchas', label: 'Canchas', icon: MapPin },
-  { href: '/dashboard/bracket', label: 'Bracket', icon: GitBranch },
+  { href: '/dashboard/bracket', label: 'Llaves', icon: GitBranch },
   { href: '/dashboard/micro', label: 'Micrófono', icon: Mic },
 ]
 

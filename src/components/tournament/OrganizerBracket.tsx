@@ -5,11 +5,52 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails } from '@/lib/types'
-import { ArrowLeft, Trophy } from 'lucide-react'
+import { ArrowLeft, Trophy, RefreshCw, Loader2 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
+import { toast } from 'sonner'
 
 export default function OrganizerBracket() {
   const store = useTournamentStore()
-  const { matches } = store
+  const searchParams = useSearchParams()
+  const { matches, tournament } = store
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadData = useCallback(async (showRefresh = false) => {
+    const tournamentId = searchParams.get('t') || store.selectedTournamentId
+    if (!tournamentId) return
+
+    if (showRefresh) setRefreshing(true)
+    else store.setLoading(true)
+
+    store.setSelectedTournamentId(tournamentId)
+
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}`)
+      if (res.ok) {
+        const data = await res.json()
+        store.setTournamentData({
+          tournament: data,
+          teams: data.teams || [],
+          courts: data.courts || [],
+          matches: data.matches || [],
+        })
+      }
+    } catch {
+      toast.error('Error al cargar')
+    }
+
+    if (showRefresh) setRefreshing(false)
+    else store.setLoading(false)
+  }, [searchParams, store])
+
+  useEffect(() => { loadData() }, []) // eslint-disable-line
+
+  // Auto-refresh cada 15s
+  useEffect(() => {
+    const interval = setInterval(() => loadData(true), 15000)
+    return () => clearInterval(interval)
+  }, [loadData])
 
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b)
   const totalRounds = rounds.length > 0 ? rounds[rounds.length - 1] : 0
@@ -28,29 +69,49 @@ export default function OrganizerBracket() {
             className="text-emerald-400 hover:text-white">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
+          <h1 className="text-lg font-bold text-white flex items-center gap-2 flex-1">
             <Trophy className="h-5 w-5 text-emerald-400" />
             Cuadro de Llaves
           </h1>
+          <Button size="sm" variant="outline" onClick={() => loadData(true)} disabled={refreshing}
+            className="border-emerald-600 text-emerald-300 hover:bg-emerald-800">
+            <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6">
-        {/* Bracket - vertical layout for mobile */}
-        <div className="space-y-8">
-          {matchesByRound.map(round => (
-            <div key={round.number}>
-              <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3 sticky top-14 bg-gradient-to-br from-green-900 to-teal-950 py-1 z-5">
-                {round.name}
-              </h2>
-              <div className="space-y-3">
-                {round.matches.map(match => (
-                  <BracketMatchCard key={match.id} match={match} />
-                ))}
+        {store.isLoading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 text-emerald-400 animate-spin" />
+          </div>
+        )}
+
+        {!store.isLoading && !tournament && (
+          <div className="text-center py-16">
+            <Trophy className="h-16 w-16 text-emerald-700 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white">No hay torneo seleccionado</h2>
+            <p className="text-emerald-400 text-sm mt-2">Seleccioná un torneo desde el panel</p>
+          </div>
+        )}
+
+        {tournament && !store.isLoading && (
+          <div className="space-y-8">
+            {matchesByRound.map(round => (
+              <div key={round.number}>
+                <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3 sticky top-14 bg-gradient-to-br from-green-900 to-teal-950 py-1 z-5">
+                  {round.name}
+                </h2>
+                <div className="space-y-3">
+                  {round.matches.map(match => (
+                    <BracketMatchCard key={match.id} match={match} />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   )
@@ -118,7 +179,7 @@ function BracketMatchCard({ match }: { match: MatchWithDetails }) {
           </span>
         </div>
 
-        {/* Status indicator */}
+        {/* Status */}
         {isActive && (
           <div className="flex items-center justify-center gap-1 mt-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -126,7 +187,7 @@ function BracketMatchCard({ match }: { match: MatchWithDetails }) {
           </div>
         )}
         {match.status === 'walkover' && (
-          <div className="text-center text-xs text-red-400 mt-1">WALKOVER</div>
+          <div className="text-center text-xs text-red-400 mt-1">W.O.</div>
         )}
       </CardContent>
     </Card>
