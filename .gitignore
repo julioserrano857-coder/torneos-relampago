@@ -50,3 +50,14 @@ prisma/migrations/
 # dev log
 dev.log
 server.log
+
+# supabase temp
+supabase/.temp/
+
+# backup files
+*.bak
+
+# generated sql
+prisma-push.sql
+
+.vercel
