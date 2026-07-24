@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tournament {
+  id          String   @id @default(cuid())
+  organizerId String
+  name        String
+  date        DateTime
+  location    String
+  status      String   @default("setup")
+  matchTime   Int      @default(10)
+  hasExtraTime Boolean @default(false)
+  penaltiesPerTeam Int @default(5)
+  publicId    String   @unique
+  password    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teams   Team[]
+  courts  Court[]
+  matches Match[]
+}
+
+model Team {
+  id           String     @id @default(cuid())
+  name         String
+  tournamentId String
+  seed         Int        @default(0)
+  isBye        Boolean    @default(false)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  homeMatches  Match[]    @relation("HomeTeam")
+  awayMatches  Match[]    @relation("AwayTeam")
+}
+
+model Court {
+  id           String     @id @default(cuid())
+  name         String
+  type         String     @default("main")
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches      Match[]
+}
+
+model Match {
+  id             String   @id @default(cuid())
+  tournamentId   String
+  round          Int
+  matchNumber    Int
+  courtId        String?
+  homeTeamId     String?
+  awayTeamId     String?
+  homeGoals      Int?
+  awayGoals      Int?
+  homePenalties  Int?
+  awayPenalties  Int?
+  status         String   @default("pending")
+  winnerId       String?
+  walkoverTeamId String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  nextMatchId    String?
+  nextMatchSlot  String?  @default("home")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  court         Court?     @relation(fields: [courtId], references: [id])
+  homeTeam      Team?      @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam      Team?      @relation("AwayTeam", fields: [awayTeamId], references: [id])
+}
