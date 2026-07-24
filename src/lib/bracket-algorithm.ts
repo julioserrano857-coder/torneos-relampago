@@ -65,7 +65,6 @@ export function generateBracketSeeds(teamCount: number): BracketSlot[] {
   if (byes > 0) {
     // Reconstruct bracket with byes for top seeds
     const reconstructedSlots: BracketSlot[] = []
-    const seededCount = teamCount - byes
 
     // Top seeds (1 through byes) get byes
     // Remaining seeds fill the first round
@@ -80,11 +79,21 @@ export function generateBracketSeeds(teamCount: number): BracketSlot[] {
       }
     }
 
-    // Place playing seeds in standard bracket order
+    // First: all bye slots (home seed gets auto-advance, no opponent)
+    for (let i = 0; i < byeSeeds.length; i++) {
+      reconstructedSlots.push({
+        position: i,
+        homeSeed: byeSeeds[i],
+        awaySeed: null,
+        isBye: true,
+      })
+    }
+
+    // Then: playing seeds in standard bracket order
     const playingMatchCount = firstRoundMatchCount - byes
     for (let i = 0; i < playingMatchCount; i++) {
       reconstructedSlots.push({
-        position: i,
+        position: byeSeeds.length + i,
         homeSeed: playingSeeds[i],
         awaySeed: playingSeeds[playingSeeds.length - 1 - i],
         isBye: false,

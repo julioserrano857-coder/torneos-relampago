@@ -184,6 +184,31 @@ export async function POST(request: Request) {
           if (updateError) throw new Error(updateError.message)
         }
 
+        // Advance bye winners to the next round immediately
+        if (r === 2) {
+          for (let m = 0; m < prevRoundMatches.length; m++) {
+            const prevMatch = prevRoundMatches[m]
+            if (prevMatch.status === 'bye' && prevMatch.winnerId) {
+              const nextMatchIndex = Math.floor(m / 2)
+              const slot = m % 2 === 0 ? 'homeTeamId' : 'awayTeamId'
+              await supabase
+                .from('Match')
+                .update({ [slot]: prevMatch.winnerId })
+                .eq('id', roundMatches[nextMatchIndex].id)
+            }
+          }
+
+          // Check if any round 2 match now has both teams → set to pending
+          for (const match of roundMatches) {
+            if (match.homeTeamId && match.awayTeamId) {
+              await supabase
+                .from('Match')
+                .update({ status: 'pending' })
+                .eq('id', match.id)
+            }
+          }
+        }
+
         prevRoundMatches = roundMatches
       }
     }
