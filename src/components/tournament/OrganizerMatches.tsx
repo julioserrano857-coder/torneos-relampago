@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
   Play,
@@ -52,6 +53,32 @@ export default function OrganizerMatches() {
   const [awayPen, setAwayPen] = useState('')
 
   const { tournament, matches, courts } = store
+  const searchParams = useSearchParams()
+
+  // Load tournament data on mount
+  useEffect(() => {
+    const tournamentId = searchParams.get('t')
+    if (!tournamentId) return
+
+    store.setLoading(true)
+    store.setSelectedTournamentId(tournamentId)
+
+    fetch(`/api/tournaments/${tournamentId}`)
+      .then(r => r.json())
+      .then(data => {
+        store.setTournamentData({
+          tournament: data,
+          teams: data.teams || [],
+          courts: data.courts || [],
+          matches: data.matches || [],
+        })
+        if (data.teams?.length) {
+          setSelectedRound(1)
+        }
+      })
+      .catch(() => toast.error('Error al cargar el torneo'))
+      .finally(() => store.setLoading(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rounds = useMemo(() => {
     const roundNums = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b)
@@ -212,6 +239,23 @@ export default function OrganizerMatches() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        {/* Loading */}
+        {store.isLoading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 text-emerald-400 animate-spin" />
+          </div>
+        )}
+
+        {/* Empty state when not loading but no tournament */}
+        {!store.isLoading && !tournament && (
+          <div className="text-center py-16">
+            <Trophy className="h-16 w-16 text-emerald-700 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white">No hay torneo seleccionado</h2>
+            <p className="text-emerald-400 text-sm mt-2">Seleccioná un torneo desde el dashboard</p>
+          </div>
+        )}
+
+        {tournament && !store.isLoading && (<>
         {/* Round Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {rounds.map(r => (
@@ -277,6 +321,7 @@ export default function OrganizerMatches() {
             <p className="text-lg">No hay partidos en esta ronda</p>
           </div>
         )}
+        </>)}
       </main>
     </div>
   )

@@ -35,11 +35,11 @@ export default function DashboardPage() {
 
       supabase
         .from('Tournament')
-        .select('*')
+        .select('*, teams:Team(id, name)')
         .eq('organizerId', user.id)
         .order('createdAt', { ascending: false })
         .then(({ data }) => {
-          if (data) setTournaments(data as Tournament[])
+          if (data) setTournaments(data as unknown as Tournament[])
           setLoading(false)
         })
     })
@@ -122,6 +122,12 @@ export default function DashboardPage() {
                       <span className="truncate">{t.location}</span>
                       <span>&bull;</span>
                       <span>{new Date(t.date).toLocaleDateString('es-AR')}</span>
+                      {t.teams && t.teams.length > 0 && (
+                        <>
+                          <span>&bull;</span>
+                          <span>{t.teams.length} equipos</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -145,7 +151,7 @@ export default function DashboardPage() {
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
-                    navigator.clipboard.writeText(getPublicLink(t.public_id))
+                    navigator.clipboard.writeText(getPublicLink(t.publicId))
                     toast.success('Link copiado')
                   }}
                     className="border-emerald-600/50 text-emerald-400 hover:bg-emerald-800/50 text-xs">
