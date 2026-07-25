@@ -565,12 +565,12 @@ function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSe
         {isPending && match.homeTeam && match.awayTeam && (
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Button size="sm" variant="outline" onClick={() => onWalkover(match, match.homeTeamId!)}
-              className="border-red-600 text-red-300 hover:bg-red-900/30 text-xs py-3">
-              W.O. {match.homeTeam?.name}
+              className="border-emerald-600 text-emerald-300 hover:bg-emerald-800/50 text-xs py-3">
+              Ganador {match.homeTeam?.name}
             </Button>
             <Button size="sm" variant="outline" onClick={() => onWalkover(match, match.awayTeamId!)}
-              className="border-red-600 text-red-300 hover:bg-red-900/30 text-xs py-3">
-              W.O. {match.awayTeam?.name}
+              className="border-emerald-600 text-emerald-300 hover:bg-emerald-800/50 text-xs py-3">
+              Ganador {match.awayTeam?.name}
             </Button>
           </div>
         )}
