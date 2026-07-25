@@ -7,7 +7,7 @@ import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw } from 'lucide-react'
+import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails, MatchStatus, Court } from '@/lib/types'
@@ -277,6 +277,15 @@ export default function DashboardPage() {
           <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
           Actualizar
         </Button>
+        <Button size="sm" variant="outline"
+          onClick={() => {
+            navigator.clipboard.writeText(`${window.location.origin}/t/${tournament?.publicId}/mic`)
+            toast.success('Link del micrófono copiado')
+          }}
+          className="border-red-600/50 text-red-400 hover:bg-red-900/30">
+          <ExternalLink className="h-4 w-4 mr-1" />
+          Mic
+        </Button>
       </div>
 
       {/* Court status */}
@@ -438,6 +447,7 @@ function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSe
   const isFinished = match.status === 'finished' || match.status === 'walkover'
   const isTied = match.status === 'tied'
   const isPending = match.status === 'pending'
+  const isReady = match.status === 'ready'
   const isBye = match.status === 'bye'
   const isHomeWinner = match.winnerId === match.homeTeamId
   const isAwayWinner = match.winnerId === match.awayTeamId
@@ -519,6 +529,20 @@ function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSe
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
               {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
               Marcar como &quot;En Juego&quot;
+            </Button>
+            <Button onClick={() => updateMatch(match.id, { status: 'ready' })}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 text-sm">
+              <Bell className="h-4 w-4 mr-2" /> Listo para llamar
+            </Button>
+          </div>
+        )}
+
+        {isReady && match.homeTeam && match.awayTeam && (
+          <div className="mt-3">
+            <Button onClick={() => onStart(match)} disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
+              Iniciar Partido
             </Button>
           </div>
         )}
