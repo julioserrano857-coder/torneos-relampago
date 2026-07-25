@@ -136,7 +136,7 @@ export default function CrearPage() {
               </div>
 
               <div className="flex gap-2">
-                <Link href={`/dashboard/partidos?t=${t.id}`} className="flex-1" onClick={e => e.stopPropagation()}>
+                <Link href="/dashboard" className="flex-1" onClick={e => { e.stopPropagation(); store.setSelectedTournamentId(t.id); }}>
                   <Button variant="outline" size="sm"
                     className="w-full border-emerald-600/50 text-emerald-300 hover:bg-emerald-800/50">
                     Mesa de Control
