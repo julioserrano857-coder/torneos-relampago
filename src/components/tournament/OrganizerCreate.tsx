@@ -92,8 +92,22 @@ export default function OrganizerCreate() {
       if (res.ok) {
         const data = await res.json()
         toast.success(`Torneo "${name}" creado con ${teamCount} equipos`)
-        toast.success(`Link: /t/${data.publicId}`)
-        // Go to dashboard (the tournament appears in the list)
+
+        // Cargar datos completos del torneo en el store
+        const detailRes = await fetch(`/api/tournaments/${data.id}`)
+        if (detailRes.ok) {
+          const detail = await detailRes.json()
+          const { useTournamentStore } = await import('@/store/tournament-store')
+          const store = useTournamentStore.getState()
+          store.setTournamentData({
+            tournament: detail,
+            teams: detail.teams || [],
+            courts: detail.courts || [],
+            matches: detail.matches || [],
+          })
+          store.setSelectedTournamentId(detail.id)
+        }
+
         router.push('/dashboard')
       } else {
         toast.error('Error al crear el torneo')

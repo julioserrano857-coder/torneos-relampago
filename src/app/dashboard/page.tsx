@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-browser'
+import { useTournamentStore } from '@/store/tournament-store'
+import OrganizerDashboard from '@/components/tournament/OrganizerDashboard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, Trophy, MapPin, Calendar, ChevronRight, Loader2, LogOut, MessageCircle } from 'lucide-react'
+import { Plus, Trophy, MapPin, Trash2, ChevronRight, Loader2, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Tournament {
@@ -22,11 +24,19 @@ interface Tournament {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const store = useTournamentStore()
   const [loading, setLoading] = useState(true)
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [userName, setUserName] = useState('')
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
 
-  useEffect(() => {
+  // Si hay un torneo seleccionado en el store, mostramos su panel
+  const showTournamentPanel = !!(
+    store.selectedTournamentId && store.tournament
+  )
+
+  const loadTournaments = useCallback(() => {
     const supabase = createBrowserClient()
 
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -45,6 +55,67 @@ export default function DashboardPage() {
     })
   }, [])
 
+  useEffect(() => {
+    loadTournaments()
+  }, [loadTournaments])
+
+  // Si entramos con un selectedTournamentId pero sin datos, cargamos
+  useEffect(() => {
+    if (store.selectedTournamentId && !store.tournament) {
+      if (store.currentView === 'home') return
+      if (navigatingTo === store.selectedTournamentId) return
+      fetch(`/api/tournaments/${store.selectedTournamentId}`)
+        .then(r => r.json())
+        .then(data => {
+          store.setTournamentData({
+            tournament: data,
+            teams: data.teams || [],
+            courts: data.courts || [],
+            matches: data.matches || [],
+          })
+        })
+        .catch(() => toast.error('Error al cargar el torneo'))
+    }
+  }, [store.selectedTournamentId]) // eslint-disable-line
+
+  const selectTournament = async (t: Tournament) => {
+    setNavigatingTo(t.id)
+    store.setSelectedTournamentId(t.id)
+    try {
+      const res = await fetch(`/api/tournaments/${t.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        store.setTournamentData({
+          tournament: data,
+          teams: data.teams || [],
+          courts: data.courts || [],
+          matches: data.matches || [],
+        })
+      }
+    } catch {
+      toast.error('Error al cargar el torneo')
+    }
+    setNavigatingTo(null)
+  }
+
+  const deleteTournament = async (t: Tournament, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`¿Eliminar "${t.name}"? Se borrarán todos los datos.`)) return
+    setDeleting(t.id)
+    try {
+      const res = await fetch(`/api/tournaments/${t.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Torneo eliminado')
+        setTournaments(prev => prev.filter(p => p.id !== t.id))
+      } else {
+        toast.error('Error al eliminar')
+      }
+    } catch {
+      toast.error('Error al eliminar')
+    }
+    setDeleting(null)
+  }
+
   const getPublicLink = (publicId: string) => {
     const base = typeof window !== 'undefined' ? window.location.origin : ''
     return `${base}/t/${publicId}`
@@ -56,6 +127,24 @@ export default function DashboardPage() {
       `⚽ *${t.name}*\n📍 ${t.location}\n📅 ${new Date(t.date).toLocaleDateString('es-AR')}\n\nSeguí el torneo en vivo:\n${link}\n\n🔍 Buscá tu equipo para ver tus partidos!`
     )
     window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
+  // Si hay un torneo seleccionado, mostramos el panel
+  if (showTournamentPanel) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => {
+            store.setSelectedTournamentId(null)
+            store.setTournamentData({ tournament: null as any, teams: [], courts: [], matches: [] })
+          }}
+          className="absolute top-2 left-2 z-10 text-emerald-400 hover:text-white text-sm px-3 py-1 rounded bg-emerald-950/50 backdrop-blur-sm"
+        >
+          ← Volver a Mis Torneos
+        </button>
+        <OrganizerDashboard />
+      </div>
+    )
   }
 
   return (
@@ -112,7 +201,8 @@ export default function DashboardPage() {
         <div className="space-y-3">
           <h2 className="text-emerald-400 font-semibold text-sm uppercase tracking-wider">Mis Torneos</h2>
           {tournaments.map(t => (
-            <Card key={t.id} className="bg-white/10 backdrop-blur-sm border-emerald-700/50">
+            <Card key={t.id} className="bg-white/10 backdrop-blur-sm border-emerald-700/50 cursor-pointer hover:bg-white/15 transition-colors"
+              onClick={() => selectTournament(t)}>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
@@ -140,22 +230,23 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Link href={`/dashboard/partidos?t=${t.id}`} className="flex-1">
+                  <Link href={`/dashboard/partidos?t=${t.id}`} className="flex-1" onClick={e => e.stopPropagation()}>
                     <Button variant="outline" size="sm"
                       className="w-full border-emerald-600/50 text-emerald-300 hover:bg-emerald-800/50">
                       Mesa de Control
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => shareWhatsApp(t)}
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); shareWhatsApp(t) }}
                     className="border-green-600/50 text-green-400 hover:bg-green-900/30">
                     <MessageCircle className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    navigator.clipboard.writeText(getPublicLink(t.publicId))
-                    toast.success('Link copiado')
-                  }}
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(getPublicLink(t.publicId)); toast.success('Link copiado') }}
                     className="border-emerald-600/50 text-emerald-400 hover:bg-emerald-800/50 text-xs">
                     LINK
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={(e) => deleteTournament(t, e)} disabled={deleting === t.id}
+                    className="border-red-600/50 text-red-400 hover:bg-red-900/30">
+                    {deleting === t.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </Button>
                 </div>
               </CardContent>
