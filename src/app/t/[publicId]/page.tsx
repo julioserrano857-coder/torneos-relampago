@@ -288,8 +288,8 @@ export default function PublicTournamentPage() {
           </section>
         )}
 
-        {/* Cuadro de Llaves (acordeón) */}
-        {matches.length > 0 && (
+        {/* Cuadro de Llaves (acordeón) - desde ronda 2 */}
+        {matches.length > 0 && rounds.length > 1 && (
           <section>
             <button
               onClick={() => setShowBracket(!showBracket)}
@@ -301,7 +301,7 @@ export default function PublicTournamentPage() {
 
             {showBracket && (
               <div className="mt-3 space-y-6">
-                {rounds.map(r => {
+                {rounds.filter(r => r > 1).map(r => {
                   const roundMatches = matches
                     .filter(m => m.round === r)
                     .sort((a, b) => a.matchNumber - b.matchNumber)
