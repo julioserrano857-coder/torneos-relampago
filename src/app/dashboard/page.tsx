@@ -45,15 +45,40 @@ export default function DashboardPage() {
 
   const { tournament, matches, courts, teams } = store
 
-  // Load tournament data from selectedTournamentId
+  // Load latest active tournament automatically
   const loadData = useCallback(async (showRefresh = false) => {
-    const id = store.selectedTournamentId
-    if (!id) { setLoading(false); return }
-
     if (showRefresh) setRefreshing(true)
     else setLoading(true)
 
     try {
+      // Si ya hay un torneo activo en el store, lo usamos
+      let id = store.selectedTournamentId
+      if (!id || showRefresh) {
+        // Buscar el último torneo no finalizado
+        const supabase = createBrowserClient()
+        const { data: userData } = await supabase.auth.getUser()
+        if (!userData?.user) { setLoading(false); return }
+
+        const { data: tournaments } = await supabase
+          .from('Tournament')
+          .select('id')
+          .eq('organizerId', userData.user.id)
+          .neq('status', 'completed')
+          .order('createdAt', { ascending: false })
+          .limit(1)
+
+        if (!tournaments?.length) {
+          store.setSelectedTournamentId(null)
+          store.setTournamentData({ tournament: null as any, teams: [], courts: [], matches: [] })
+          setLoading(false)
+          if (showRefresh) setRefreshing(false)
+          return
+        }
+
+        id = tournaments[0].id
+        store.setSelectedTournamentId(id)
+      }
+
       const res = await fetch(`/api/tournaments/${id}`)
       if (res.ok) {
         const data = await res.json()
@@ -63,9 +88,7 @@ export default function DashboardPage() {
           courts: data.courts || [],
           matches: data.matches || [],
         })
-        if (data.matches?.length) {
-          setSelectedRound(1)
-        }
+        if (data.matches?.length) setSelectedRound(1)
       }
     } catch {
       toast.error('Error al cargar')
@@ -76,6 +99,13 @@ export default function DashboardPage() {
   }, [store])
 
   useEffect(() => { loadData() }, []) // eslint-disable-line
+
+  // Si cambia el selectedTournamentId desde otro lado (ej: Nuevo Torneo), recargamos
+  useEffect(() => {
+    if (store.selectedTournamentId && (!tournament || tournament.id !== store.selectedTournamentId)) {
+      loadData()
+    }
+  }, [store.selectedTournamentId]) // eslint-disable-line
 
   // Auto-refresh cada 15s
   useEffect(() => {
@@ -199,9 +229,9 @@ export default function DashboardPage() {
     return (
       <div className="px-4 py-16 text-center space-y-4">
         <Swords className="h-16 w-16 text-emerald-700 mx-auto" />
-        <h2 className="text-xl font-bold text-white">No hay torneo seleccionado</h2>
+        <h2 className="text-xl font-bold text-white">No hay torneos activos</h2>
         <p className="text-emerald-400 text-sm">
-          Seleccioná un torneo desde <strong>Nuevo Torneo</strong>.
+          Creá un torneo desde <strong>Nuevo Torneo</strong>.
         </p>
       </div>
     )
