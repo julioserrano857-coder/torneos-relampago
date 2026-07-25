@@ -7,7 +7,7 @@ import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell } from 'lucide-react'
+import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails, MatchStatus, Court } from '@/lib/types'
@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [penaltyMatch, setPenaltyMatch] = useState<string | null>(null)
   const [homePen, setHomePen] = useState('')
   const [awayPen, setAwayPen] = useState('')
+  const [showPenaltyModal, setShowPenaltyModal] = useState(false)
 
   const { tournament, matches, courts, teams } = store
 
@@ -51,10 +52,8 @@ export default function DashboardPage() {
     else setLoading(true)
 
     try {
-      // Si ya hay un torneo activo en el store, lo usamos
       let id = store.selectedTournamentId
       if (!id || showRefresh) {
-        // Buscar el último torneo no finalizado
         const supabase = createBrowserClient()
         const { data: userData } = await supabase.auth.getUser()
         if (!userData?.user) { setLoading(false); return }
@@ -100,7 +99,6 @@ export default function DashboardPage() {
 
   useEffect(() => { loadData() }, []) // eslint-disable-line
 
-  // Si cambia el selectedTournamentId desde otro lado (ej: Nuevo Torneo), recargamos
   useEffect(() => {
     if (store.selectedTournamentId && (!tournament || tournament.id !== store.selectedTournamentId)) {
       loadData()
@@ -128,7 +126,8 @@ export default function DashboardPage() {
         store.updateMatch(updated)
         toast.success('Partido actualizado')
       } else {
-        toast.error('Error al actualizar')
+        const err = await res.json()
+        toast.error(err.error || 'Error al actualizar')
       }
     } catch {
       toast.error('Error de conexión')
@@ -151,7 +150,7 @@ export default function DashboardPage() {
 
   const handleFinishMatch = (match: MatchWithDetails) => {
     if (match.homeGoals === null || match.awayGoals === null) {
-      toast.error('Carga los goles primero')
+      toast.error('Cargá los goles primero')
       return
     }
     if (match.homeGoals === match.awayGoals) {
@@ -167,7 +166,8 @@ export default function DashboardPage() {
         })
       } else {
         updateMatch(match.id, { status: 'tied' })
-        toast.info('Empate - cargá los penales')
+        setPenaltyMatch(match.id)
+        setShowPenaltyModal(true)
       }
       return
     }
@@ -196,7 +196,7 @@ export default function DashboardPage() {
       status: 'finished', winnerId,
       finishedAt: new Date().toISOString(), courtId: null,
     })
-    setPenaltyMatch(null); setHomePen(''); setAwayPen('')
+    setPenaltyMatch(null); setHomePen(''); setAwayPen(''); setShowPenaltyModal(false)
   }
 
   const handleWalkover = (match: MatchWithDetails, teamId: string) => {
@@ -218,10 +218,8 @@ export default function DashboardPage() {
 
   const playingMatches = matches.filter(m => m.status === 'playing')
 
-  const getCourtStatus = (court: Court) => {
-    const match = playingMatches.find(m => m.courtId === court.id)
-    return match || null
-  }
+  const getPlayingMatch = (courtId: string) =>
+    playingMatches.find(m => m.courtId === courtId)
 
   // ─── Empty / No tournament ──────────────────────────────────────
 
@@ -250,7 +248,6 @@ export default function DashboardPage() {
       <div className="px-4 py-16 text-center space-y-4">
         <Trophy className="h-16 w-16 text-emerald-700 mx-auto" />
         <h2 className="text-xl font-bold text-white">Torneo no encontrado</h2>
-        <p className="text-emerald-400 text-sm">Seleccioná otro torneo desde Nuevo Torneo.</p>
       </div>
     )
   }
@@ -258,181 +255,172 @@ export default function DashboardPage() {
   // ─── Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Swords className="h-6 w-6 text-emerald-400" />
+    <div className="px-4 py-4 space-y-3">
+      {/* Header compacto */}
+      <div className="flex items-center gap-2">
+        <Swords className="h-5 w-5 text-emerald-400 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-white truncate">{tournament.name}</h1>
-          <div className="flex items-center gap-2 text-emerald-400 text-xs">
-            <MapPin className="h-3 w-3" />
+          <h1 className="text-white font-bold text-sm truncate">{tournament.name}</h1>
+          <div className="flex items-center gap-1 text-emerald-400 text-[10px]">
+            <MapPin className="h-2.5 w-2.5" />
             <span className="truncate">{tournament.location}</span>
-            {teams.length > 0 && (
-              <><span>&bull;</span><span>{teams.length} equipos</span></>
-            )}
+            {teams.length > 0 && <><span>·</span><span>{teams.length} eq.</span></>}
           </div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => loadData(true)} disabled={refreshing}
-          className="border-emerald-600 text-emerald-300 hover:bg-emerald-800">
-          <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-          Actualizar
+        <Button size="sm" variant="ghost" onClick={() => loadData(true)} disabled={refreshing}
+          className="text-emerald-400 hover:text-white h-7 w-7 p-0">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
         </Button>
       </div>
 
-      {/* Court status */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Barra de canchas compacta - una línea por cancha */}
+      <div className="space-y-1">
         {courts.filter(c => c.type === 'main').map(court => {
-          const match = getCourtStatus(court)
+          const match = getPlayingMatch(court.id)
           return (
-            <Card key={court.id} className={`backdrop-blur-sm ${
-              match ? 'bg-emerald-900/50 border-emerald-500' : 'bg-green-600/10 border-green-600'
+            <div key={court.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs ${
+              match ? 'bg-emerald-900/50 border border-emerald-500' : 'bg-green-900/10 border border-green-800/30'
             }`}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <MapPin className={`h-4 w-4 ${match ? 'text-emerald-400' : 'text-green-400'}`} />
-                    <span className="font-bold text-white text-sm">{court.name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      match ? 'bg-emerald-600 text-white' : 'bg-green-600/30 text-green-300'
-                    }`}>
-                      {match ? 'EN JUEGO' : 'LIBRE'}
-                    </span>
-                  </div>
-                  {match && (
-                    <p className="text-white text-sm mt-1 font-medium">
-                      {match.homeTeam?.name} vs {match.awayTeam?.name}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${match ? 'bg-emerald-400 animate-pulse' : 'bg-green-500'}`} />
+              <span className="text-white font-semibold text-xs">{court.name}</span>
+              {match ? (
+                <span className="text-white truncate flex-1 text-right">
+                  {match.homeTeam?.name} vs {match.awayTeam?.name}
+                </span>
+              ) : (
+                <span className="text-green-400/60 flex-1 text-right">Libre</span>
+              )}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                match ? 'bg-emerald-600 text-white' : 'bg-green-600/20 text-green-400'
+              }`}>
+                {match ? 'EN JUEGO' : 'LIBRE'}
+              </span>
+            </div>
+          )
+        })}
+        {courts.filter(c => c.type === 'penalties').map(court => {
+          const match = getPlayingMatch(court.id)
+          return (
+            <div key={court.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs ${
+              match ? 'bg-yellow-900/30 border border-yellow-600' : 'bg-yellow-900/10 border border-yellow-800/30'
+            }`}>
+              <span className="flex-shrink-0">⚽</span>
+              <span className="text-white font-semibold text-xs">{court.name}</span>
+              {match ? (
+                <span className="text-white truncate flex-1 text-right">
+                  {match.homeTeam?.name} vs {match.awayTeam?.name}
+                </span>
+              ) : (
+                <span className="text-yellow-400/60 flex-1 text-right">Libre</span>
+              )}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                match ? 'bg-yellow-600 text-black' : 'bg-yellow-600/20 text-yellow-400'
+              }`}>
+                {match ? 'PENALES' : 'LIBRE'}
+              </span>
+            </div>
           )
         })}
       </div>
 
-      {/* Penalty court status */}
-      {courts.filter(c => c.type === 'penalties').map(court => {
-        const match = getCourtStatus(court)
-        return (
-          <Card key={court.id} className="bg-yellow-900/20 border-yellow-600 backdrop-blur-sm">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-yellow-400">⚽</span>
-                <span className="font-bold text-white text-sm">{court.name}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                  match ? 'bg-yellow-600 text-white' : 'bg-yellow-600/20 text-yellow-300'
-                }`}>
-                  {match ? 'EN PENALES' : 'LIBRE'}
-                </span>
-              </div>
-              {match && (
-                <p className="text-white text-sm mt-1">
-                  {match.homeTeam?.name} vs {match.awayTeam?.name}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
-
-      {/* Playing now - compact banner */}
-      {playingMatches.length > 0 && (
-        <div className="bg-emerald-900/50 border border-emerald-500 rounded-lg p-3 flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-white font-medium text-sm">
-            {playingMatches.length} partido{playingMatches.length > 1 ? 's' : ''} en juego ahora
-          </span>
-        </div>
-      )}
-
-      {/* Round tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      {/* Pestañas de ronda - compactas */}
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
         {rounds.map(r => (
-          <Button key={r} size="sm"
-            variant={currentRound === r ? 'default' : 'outline'}
+          <button key={r}
             onClick={() => setSelectedRound(r)}
-            className={`whitespace-nowrap ${currentRound === r ? 'bg-emerald-600 text-white' : 'border-emerald-600 text-emerald-300 hover:bg-emerald-800'}`}>
+            className={`whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors ${
+              currentRound === r
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white/5 text-emerald-400 hover:bg-white/10'
+            }`}>
             {getRoundName(r, totalRounds)}
-          </Button>
+          </button>
         ))}
       </div>
 
-      {/* Penalty dialog */}
-      {penaltyMatch && (() => {
-        const m = matches.find(m => m.id === penaltyMatch)
-        if (!m) return null
-        return (
-          <Card className="bg-yellow-900/30 border-yellow-600">
-            <CardContent className="p-4 space-y-4">
-              <h3 className="text-yellow-300 font-bold flex items-center gap-2">
-                <Zap className="h-5 w-5" /> Definición por Penales
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <p className="text-white text-sm mb-1">{m.homeTeam?.name}</p>
-                  <Input type="number" inputMode="numeric" pattern="[0-9]*" min={0} value={homePen}
-                    onChange={e => setHomePen(e.target.value)}
-                    placeholder="Penales" className="bg-white/10 border-yellow-600 text-white text-center text-2xl h-16"
-                    onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
-                </div>
-                <div className="text-center">
-                  <p className="text-white text-sm mb-1">{m.awayTeam?.name}</p>
-                  <Input type="number" inputMode="numeric" pattern="[0-9]*" min={0} value={awayPen}
-                    onChange={e => setAwayPen(e.target.value)}
-                    placeholder="Penales" className="bg-white/10 border-yellow-600 text-white text-center text-2xl h-16"
-                    onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={() => setPenaltyMatch(null)}
-                  variant="outline" className="flex-1 border-yellow-600 text-yellow-300">Cancelar</Button>
-                <Button onClick={() => handlePenalties(m)}
-                  className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white">Confirmar Ganador</Button>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })()}
-
-      {/* Match cards */}
-      <div className="space-y-3">
+      {/* Cards de partidos - compactas */}
+      <div className="space-y-2">
         {roundMatches.map(match => (
-          <MatchCard
+          <CompactMatchCard
             key={match.id}
             match={match}
             courts={courts}
-            allMatches={matches}
             loading={loadingMatch === match.id}
-            onStart={handleStartMatch}
-            onFinish={handleFinishMatch}
-            onSetGoals={handleSetGoals}
-            onPenalties={() => setPenaltyMatch(match.id)}
-            onWalkover={handleWalkover}
+            onStart={() => handleStartMatch(match)}
+            onFinish={() => handleFinishMatch(match)}
+            onSetGoals={(field, value) => handleSetGoals(match.id, field, value)}
+            onPenalties={() => { setPenaltyMatch(match.id); setShowPenaltyModal(true) }}
+            onWalkover={(teamId) => handleWalkover(match, teamId)}
+            onReady={() => updateMatch(match.id, { status: 'ready' })}
           />
         ))}
 
         {roundMatches.length === 0 && (
-          <div className="text-center py-12 text-emerald-400">
-            <p className="text-lg">No hay partidos en esta ronda</p>
+          <div className="text-center py-8 text-emerald-500 text-sm">
+            No hay partidos en esta ronda
           </div>
         )}
       </div>
+
+      {/* Penalty Modal - fixed bottom */}
+      {showPenaltyModal && penaltyMatch && (() => {
+        const m = matches.find(m => m.id === penaltyMatch)
+        if (!m) return null
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setShowPenaltyModal(false)} />
+            <Card className="relative bg-yellow-900/95 border-yellow-600 backdrop-blur w-full sm:max-w-md mx-4 mb-4 sm:mb-0">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-yellow-300 font-bold flex items-center gap-2">
+                    <Zap className="h-5 w-5" /> Penales
+                  </h3>
+                  <button onClick={() => setShowPenaltyModal(false)} className="text-yellow-400 text-lg">✕</button>
+                </div>
+                <p className="text-yellow-200 text-sm text-center">{m.homeTeam?.name} vs {m.awayTeam?.name}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <p className="text-white text-sm mb-1">{m.homeTeam?.name}</p>
+                    <Input type="number" inputMode="numeric" min={0} value={homePen}
+                      onChange={e => setHomePen(e.target.value)}
+                      placeholder="0" className="bg-black/30 border-yellow-600 text-white text-center text-2xl h-14"
+                      onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-white text-sm mb-1">{m.awayTeam?.name}</p>
+                    <Input type="number" inputMode="numeric" min={0} value={awayPen}
+                      onChange={e => setAwayPen(e.target.value)}
+                      placeholder="0" className="bg-black/30 border-yellow-600 text-white text-center text-2xl h-14"
+                      onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={() => setShowPenaltyModal(false)}
+                    variant="outline" className="border-yellow-600 text-yellow-300">Cancelar</Button>
+                  <Button onClick={() => handlePenalties(m)}
+                    className="bg-yellow-600 hover:bg-yellow-500 text-white">Confirmar</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
     </div>
   )
 }
 
-// ─── Match Card ───────────────────────────────────────────────────
+// ─── Compact Match Card ───────────────────────────────────────────
 
-function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSetGoals, onPenalties, onWalkover }: {
+function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoals, onPenalties, onWalkover, onReady }: {
   match: MatchWithDetails
   courts: { id: string; name: string; type: string }[]
-  allMatches: MatchWithDetails[]
   loading: boolean
-  onStart: (match: MatchWithDetails, courtId?: string) => void
-  onFinish: (match: MatchWithDetails) => void
-  onSetGoals: (matchId: string, field: 'homeGoals' | 'awayGoals', value: string) => void
+  onStart: () => void
+  onFinish: () => void
+  onSetGoals: (field: 'homeGoals' | 'awayGoals', value: string) => void
   onPenalties: () => void
-  onWalkover: (match: MatchWithDetails, teamId: string) => void
+  onWalkover: (teamId: string) => void
+  onReady: () => void
 }) {
   const isPlaying = match.status === 'playing'
   const isFinished = match.status === 'finished' || match.status === 'walkover'
@@ -445,144 +433,137 @@ function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSe
 
   if (isBye) {
     return (
-      <Card className="bg-purple-900/20 border-purple-700/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-purple-300 text-sm font-medium">
-            BYE - {match.homeTeam?.name} avanza automáticamente
-          </p>
-        </CardContent>
-      </Card>
+      <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-3 text-center">
+        <p className="text-purple-300 text-xs font-medium">
+          BYE — {match.homeTeam?.name} avanza automáticamente
+        </p>
+      </div>
     )
   }
 
   return (
-    <Card className={`backdrop-blur-sm ${
+    <div className={`rounded-xl border ${
       isPlaying ? 'bg-emerald-900/50 border-emerald-500 shadow-lg shadow-emerald-900/20' :
-      isFinished ? 'bg-white/5 border-green-800' :
+      isFinished ? 'bg-white/5 border-green-800/50' :
       isTied ? 'bg-yellow-900/20 border-yellow-600' :
-      'bg-white/10 border-emerald-700'
+      'bg-white/10 border-emerald-700/50'
     }`}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-emerald-400 text-xs font-medium">Partido #{match.matchNumber}</span>
-          <span className={`text-xs px-2 py-1 rounded-full border font-medium ${STATUS_COLORS[match.status]}`}>
+      <div className="p-3 space-y-2">
+        {/* Header: match number + status */}
+        <div className="flex items-center justify-between">
+          <span className="text-emerald-400 text-[10px] font-medium">#{match.matchNumber}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[match.status]}`}>
             {STATUS_LABELS[match.status]}
           </span>
         </div>
 
-        <div className="space-y-2">
-          {/* Home Team */}
-          <div className={`flex items-center gap-3 p-3 rounded-lg ${isHomeWinner ? 'bg-green-600/20 border border-green-600' : 'bg-white/5'}`}>
-            <span className={`flex-1 font-semibold ${isHomeWinner ? 'text-green-300' : match.homeTeam?.name ? 'text-white' : 'text-gray-500'}`}>
-              {match.homeTeam?.name || 'Por definir'}
+        {/* Equipos + goles */}
+        <div className="space-y-1">
+          {/* Home */}
+          <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg ${isHomeWinner ? 'bg-green-600/20' : 'bg-white/5'}`}>
+            <span className={`flex-1 text-sm font-medium ${isHomeWinner ? 'text-green-300' : match.homeTeam?.name ? 'text-white' : 'text-gray-500'}`}>
+              {match.homeTeam?.name || '???'}
             </span>
             {(isPending || isPlaying || isTied) && match.homeTeam && (
-              <Input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={99}
-                defaultValue={match.homeGoals ?? ''}
-                onChange={e => onSetGoals(match.id, 'homeGoals', e.target.value)}
-                className="w-16 h-12 text-center text-xl font-bold bg-white/10 border-emerald-600 text-white"
-                placeholder="-" />
+              <div className="flex items-center gap-1">
+                <button onClick={() => onSetGoals('homeGoals', String(Math.max(0, (match.homeGoals || 0) - 1)))}
+                  className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">-</button>
+                <span className="text-white font-bold text-base w-6 text-center tabular-nums">{match.homeGoals ?? 0}</span>
+                <button onClick={() => onSetGoals('homeGoals', String((match.homeGoals || 0) + 1))}
+                  className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">+</button>
+              </div>
             )}
             {isFinished && (
-              <span className="text-2xl font-bold text-white w-16 text-center">{match.homeGoals ?? '-'}</span>
+              <span className="text-white font-bold text-base w-16 text-right">{match.homeGoals ?? '-'}</span>
             )}
           </div>
 
-          {/* Away Team */}
-          <div className={`flex items-center gap-3 p-3 rounded-lg ${isAwayWinner ? 'bg-green-600/20 border border-green-600' : 'bg-white/5'}`}>
-            <span className={`flex-1 font-semibold ${isAwayWinner ? 'text-green-300' : match.awayTeam?.name ? 'text-white' : 'text-gray-500'}`}>
-              {match.awayTeam?.name || 'Por definir'}
+          {/* Away */}
+          <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg ${isAwayWinner ? 'bg-green-600/20' : 'bg-white/5'}`}>
+            <span className={`flex-1 text-sm font-medium ${isAwayWinner ? 'text-green-300' : match.awayTeam?.name ? 'text-white' : 'text-gray-500'}`}>
+              {match.awayTeam?.name || '???'}
             </span>
             {(isPending || isPlaying || isTied) && match.awayTeam && (
-              <Input type="number" inputMode="numeric" pattern="[0-9]*" min={0} max={99}
-                defaultValue={match.awayGoals ?? ''}
-                onChange={e => onSetGoals(match.id, 'awayGoals', e.target.value)}
-                className="w-16 h-12 text-center text-xl font-bold bg-white/10 border-emerald-600 text-white"
-                placeholder="-" />
+              <div className="flex items-center gap-1">
+                <button onClick={() => onSetGoals('awayGoals', String(Math.max(0, (match.awayGoals || 0) - 1)))}
+                  className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">-</button>
+                <span className="text-white font-bold text-base w-6 text-center tabular-nums">{match.awayGoals ?? 0}</span>
+                <button onClick={() => onSetGoals('awayGoals', String((match.awayGoals || 0) + 1))}
+                  className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">+</button>
+              </div>
             )}
             {isFinished && (
-              <span className="text-2xl font-bold text-white w-16 text-center">{match.awayGoals ?? '-'}</span>
+              <span className="text-white font-bold text-base w-16 text-right">{match.awayGoals ?? '-'}</span>
             )}
           </div>
 
-          {/* Penalties indicator */}
+          {/* Penales indicator */}
           {(isFinished || isTied) && match.homePenalties !== null && match.awayPenalties !== null && (
-            <div className="text-center text-sm text-yellow-300">
-              Penales: {match.homeTeam?.name} {match.homePenalties} - {match.awayPenalties} {match.awayTeam?.name}
+            <div className="text-center text-[10px] text-yellow-300">
+              Penales: {match.homeTeam?.name} {match.homePenalties} — {match.awayPenalties} {match.awayTeam?.name}
             </div>
           )}
         </div>
 
-        {/* Action Buttons */}
+        {/* Botones de acción */}
         {isPending && match.homeTeam && match.awayTeam && (
-          <div className="mt-3 space-y-2">
+          <div className="space-y-1.5 pt-1">
             {match.round === 1 ? (
-              // Ronda 1: directo a jugar
-              <Button onClick={() => onStart(match)} disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
-                {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
-                Marcar como &quot;En Juego&quot;
+              <Button onClick={onStart} disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 text-sm">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+                Marcar como En Juego
               </Button>
             ) : (
-              // Ronda 2+: primero avisar al DJ
-              <Button onClick={() => updateMatch(match.id, { status: 'ready' })}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-5 text-base">
-                <Bell className="h-5 w-5 mr-2" /> Listo para llamar
+              <Button onClick={onReady}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 text-sm">
+                <Bell className="h-4 w-4 mr-2" /> Listo para llamar
               </Button>
             )}
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={() => onWalkover(match.homeTeamId!)}
+                className="text-[10px] py-2 rounded-lg border border-emerald-600/50 text-emerald-300 hover:bg-emerald-800/50 font-medium">
+                Ganador {match.homeTeam?.name}
+              </button>
+              <button onClick={() => onWalkover(match.awayTeamId!)}
+                className="text-[10px] py-2 rounded-lg border border-emerald-600/50 text-emerald-300 hover:bg-emerald-800/50 font-medium">
+                Ganador {match.awayTeam?.name}
+              </button>
+            </div>
           </div>
         )}
 
         {isReady && match.homeTeam && match.awayTeam && (
-          <div className="mt-3">
-            <Button onClick={() => onStart(match)} disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
-              {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
-              Iniciar Partido
-            </Button>
-          </div>
+          <Button onClick={onStart} disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 text-sm">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+            Iniciar Partido
+          </Button>
         )}
 
         {isPlaying && (
-          <div className="mt-3 space-y-2">
-            <Button onClick={() => onFinish(match)} disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-500 text-white py-5 text-base">
-              {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Square className="h-5 w-5 mr-2" />}
-              Cargar Resultado Final
-            </Button>
-          </div>
+          <Button onClick={onFinish} disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-500 text-white py-4 text-sm">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Square className="h-4 w-4 mr-2" />}
+            Cargar Resultado Final
+          </Button>
         )}
 
         {isTied && (
-          <div className="mt-3">
-            <Button onClick={onPenalties}
-              className="w-full bg-yellow-600 hover:bg-yellow-500 text-white py-5 text-base">
-              <Zap className="h-5 w-5 mr-2" /> Definición por Penales
-            </Button>
-          </div>
-        )}
-
-        {isPending && match.homeTeam && match.awayTeam && (
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button size="sm" variant="outline" onClick={() => onWalkover(match, match.homeTeamId!)}
-              className="border-emerald-600 text-emerald-300 hover:bg-emerald-800/50 text-xs py-3">
-              Ganador {match.homeTeam?.name}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onWalkover(match, match.awayTeamId!)}
-              className="border-emerald-600 text-emerald-300 hover:bg-emerald-800/50 text-xs py-3">
-              Ganador {match.awayTeam?.name}
-            </Button>
-          </div>
+          <Button onClick={onPenalties}
+            className="w-full bg-yellow-600 hover:bg-yellow-500 text-white py-4 text-sm">
+            <Zap className="h-4 w-4 mr-2" /> Definición por Penales
+          </Button>
         )}
 
         {/* Court indicator */}
         {match.court && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400">
+          <div className="flex items-center gap-1 text-[10px] text-emerald-400">
             <Clock className="h-3 w-3" />
             <span>En {match.court.name}</span>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

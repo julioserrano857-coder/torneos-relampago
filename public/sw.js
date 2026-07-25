@@ -1,14 +1,13 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'torneos-v1';
+const CACHE_NAME = 'torneos-v2';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];
 
-// Install: cache static assets
+// Install: cache only static assets (not pages)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
@@ -26,39 +25,35 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch: network-first for pages, cache-first for static assets
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // API calls: always network, with cache fallback
+  // API calls: network-only
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
+  }
+
+  // Static assets (icons, images): cache-first
+  if (STATIC_ASSETS.includes(url.pathname)) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache successful responses for offline
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
+      caches.match(request).then((cached) => cached || fetch(request))
     );
     return;
   }
 
-  // Static assets: cache-first
+  // Everything else (pages, JS, CSS): network-first, always get latest
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(request))
   );
 });
