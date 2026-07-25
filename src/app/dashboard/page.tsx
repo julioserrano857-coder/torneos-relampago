@@ -8,7 +8,7 @@ import { useTournamentStore } from '@/store/tournament-store'
 import OrganizerDashboard from '@/components/tournament/OrganizerDashboard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, Trophy, MapPin, Trash2, ChevronRight, Loader2, MessageCircle } from 'lucide-react'
+import { Plus, Trophy, MapPin, Trash2, Loader2, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Tournament {
@@ -157,22 +157,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Create new tournament */}
-      <Link href="/dashboard/crear">
-        <Card className="bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30 transition-colors cursor-pointer">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="bg-emerald-600 p-2.5 rounded-xl">
-              <Plus className="h-6 w-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-semibold">Crear Nuevo Torneo</p>
-              <p className="text-emerald-300 text-sm">Cargá equipos, reglas y canchas</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-emerald-400" />
-          </CardContent>
-        </Card>
-      </Link>
-
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -186,13 +170,8 @@ export default function DashboardPage() {
           <Trophy className="h-16 w-16 text-emerald-700 mx-auto" />
           <h2 className="text-xl font-bold text-white">Aún no creaste torneos</h2>
           <p className="text-emerald-400 text-sm max-w-sm mx-auto">
-            Creá tu primer torneo relámpago. Es gratis y lo tenés listo en minutos.
+            Creá tu primer torneo desde el menú <strong>Nuevo Torneo</strong>.
           </p>
-          <Link href="/dashboard/crear">
-            <Button className="bg-emerald-600 hover:bg-emerald-500 text-white">
-              <Plus className="h-4 w-4 mr-2" /> Crear Torneo
-            </Button>
-          </Link>
         </div>
       )}
 
