@@ -7,7 +7,7 @@ import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails, MatchStatus, Court } from '@/lib/types'
@@ -165,7 +165,7 @@ export default function DashboardPage() {
           finishedAt: new Date().toISOString(), courtId: null,
         })
       } else {
-        updateMatch(match.id, { status: 'tied' })
+        updateMatch(match.id, { status: 'tied', courtId: null })
         setPenaltyMatch(match.id)
         setShowPenaltyModal(true)
       }
@@ -180,7 +180,17 @@ export default function DashboardPage() {
 
   const handleSetGoals = (matchId: string, field: 'homeGoals' | 'awayGoals', value: string) => {
     const num = value === '' ? null : parseInt(value) || 0
-    updateMatch(matchId, { [field]: num })
+    // Optimistic update: aplicamos el cambio local primero
+    const currentMatch = matches.find(m => m.id === matchId)
+    if (currentMatch) {
+      store.updateMatch({ ...currentMatch, [field]: num })
+    }
+    // Luego enviamos a la API en background
+    fetch(`/api/matches/${matchId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: num }),
+    }).catch(() => {})
   }
 
   const handlePenalties = (match: MatchWithDetails) => {
@@ -191,10 +201,13 @@ export default function DashboardPage() {
     const hp = parseInt(homePen), ap = parseInt(awayPen)
     if (hp === ap) { toast.error('Los penales no pueden ser iguales'); return }
     const winnerId = hp > ap ? match.homeTeamId : match.awayTeamId
+    // Asignar automáticamente a la estación de penales
+    const penaltyCourt = courts.find(c => c.type === 'penalties')
     updateMatch(match.id, {
       homePenalties: hp, awayPenalties: ap,
       status: 'finished', winnerId,
-      finishedAt: new Date().toISOString(), courtId: null,
+      finishedAt: new Date().toISOString(),
+      courtId: penaltyCourt?.id || null,
     })
     setPenaltyMatch(null); setHomePen(''); setAwayPen(''); setShowPenaltyModal(false)
   }
