@@ -201,13 +201,10 @@ export default function DashboardPage() {
     const hp = parseInt(homePen), ap = parseInt(awayPen)
     if (hp === ap) { toast.error('Los penales no pueden ser iguales'); return }
     const winnerId = hp > ap ? match.homeTeamId : match.awayTeamId
-    // Asignar automáticamente a la estación de penales
-    const penaltyCourt = courts.find(c => c.type === 'penalties')
     updateMatch(match.id, {
       homePenalties: hp, awayPenalties: ap,
       status: 'finished', winnerId,
-      finishedAt: new Date().toISOString(),
-      courtId: penaltyCourt?.id || null,
+      finishedAt: new Date().toISOString(), courtId: null,
     })
     setPenaltyMatch(null); setHomePen(''); setAwayPen(''); setShowPenaltyModal(false)
   }
