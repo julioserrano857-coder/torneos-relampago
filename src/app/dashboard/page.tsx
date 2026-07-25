@@ -516,15 +516,20 @@ function MatchCard({ match, courts, allMatches, loading, onStart, onFinish, onSe
         {/* Action Buttons */}
         {isPending && match.homeTeam && match.awayTeam && (
           <div className="mt-3 space-y-2">
-            <Button onClick={() => onStart(match)} disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
-              {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
-              Marcar como &quot;En Juego&quot;
-            </Button>
-            <Button onClick={() => updateMatch(match.id, { status: 'ready' })}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 text-sm">
-              <Bell className="h-4 w-4 mr-2" /> Listo para llamar
-            </Button>
+            {match.round === 1 ? (
+              // Ronda 1: directo a jugar
+              <Button onClick={() => onStart(match)} disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 text-base">
+                {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
+                Marcar como &quot;En Juego&quot;
+              </Button>
+            ) : (
+              // Ronda 2+: primero avisar al DJ
+              <Button onClick={() => updateMatch(match.id, { status: 'ready' })}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-5 text-base">
+                <Bell className="h-5 w-5 mr-2" /> Listo para llamar
+              </Button>
+            )}
           </div>
         )}
 
