@@ -323,16 +323,28 @@ export default function PublicTournamentPage() {
           </section>
         )}
 
-        {/* Champion banner */}
+        {/* Champion banner - tipo copa del mundo */}
         {tournament.status === 'completed' && (() => {
           const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
           const champion = teams.find(t => t.id === finalMatch?.winnerId)
+          const runnerUp = finalMatch?.homeTeamId === champion?.id ? finalMatch?.awayTeam : finalMatch?.homeTeam
           return champion ? (
-            <Card className="bg-yellow-900/30 border-yellow-600">
-              <CardContent className="p-6 text-center">
-                <Trophy className="h-12 w-12 text-yellow-400 mx-auto mb-3" />
-                <p className="text-yellow-300 text-2xl font-black">{champion.name}</p>
-                <p className="text-yellow-400 text-sm mt-1">CAMPEÓN</p>
+            <Card className="bg-gradient-to-br from-yellow-900/40 via-yellow-800/20 to-yellow-900/40 border-yellow-500 shadow-lg shadow-yellow-900/30 overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-400" />
+              <CardContent className="p-8 text-center space-y-4">
+                <div className="text-6xl animate-bounce">🏆</div>
+                <div>
+                  <p className="text-yellow-300 text-xs uppercase tracking-[0.3em] font-bold">Campeón</p>
+                  <h2 className="text-yellow-100 text-3xl font-black mt-1">{champion.name}</h2>
+                </div>
+                <div className="flex items-center justify-center gap-4 text-sm">
+                  <div className="bg-yellow-600/20 rounded-lg px-4 py-2 text-yellow-300">
+                    <span className="text-yellow-400">🥇</span> {runnerUp?.name || 'Subcampeón'}
+                  </div>
+                </div>
+                <div className="pt-2 text-yellow-600/60 text-[10px] uppercase tracking-wider">
+                  {tournament.name} &bull; {new Date(tournament.date).toLocaleDateString('es-AR')}
+                </div>
               </CardContent>
             </Card>
           ) : null
