@@ -2,28 +2,11 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import {
-  Trophy,
-  Search,
-  Play,
-  Check,
-  MessageCircle,
-  Share2,
-  Link,
-  RefreshCw,
-  Loader2,
-  MapPin,
-  Clock,
-  Users,
-} from 'lucide-react'
-import { toast } from 'sonner'
+import { Card, CardContent } from '@/components/ui/card'
+import { Trophy, Search, MapPin, Users, ChevronDown, ChevronUp, RefreshCw, Loader2 } from 'lucide-react'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails, Team, Tournament, Court } from '@/lib/types'
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface TournamentData {
   tournament: Tournament
@@ -31,8 +14,6 @@ interface TournamentData {
   courts: Court[]
   matches: MatchWithDetails[]
 }
-
-// ─── Page Component ───────────────────────────────────────────────────────────
 
 export default function PublicTournamentPage() {
   const params = useParams()
@@ -43,21 +24,18 @@ export default function PublicTournamentPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
+  const [showBracket, setShowBracket] = useState(false)
 
   const tournament = data?.tournament ?? null
   const teams = data?.teams ?? []
   const courts = data?.courts ?? []
   const matches = data?.matches ?? []
 
-  // ─── Data fetching ───────────────────────────────────────────────────────
+  // ─── Fetch ────────────────────────────────────────────────────
 
-  const fetchTournament = useCallback(async (showRefresh = false) => {
+  const fetchTournament = useCallback(async () => {
     if (!publicId) return
-    if (showRefresh) setRefreshing(true)
-    else setLoading(true)
     setError(null)
-
     try {
       const res = await fetch(`/api/tournaments?publicId=${publicId}`)
       if (res.ok) {
@@ -74,82 +52,45 @@ export default function PublicTournamentPage() {
     } catch {
       setError('Error al cargar el torneo')
     }
-
-    if (showRefresh) setRefreshing(false)
-    else setLoading(false)
+    setLoading(false)
   }, [publicId])
 
-  useEffect(() => {
-    fetchTournament()
-  }, [fetchTournament])
+  useEffect(() => { fetchTournament() }, [fetchTournament])
 
-  // Auto refresh every 15 seconds
+  // Auto-refresh cada 15s
   useEffect(() => {
     if (!tournament) return
-    const interval = setInterval(() => fetchTournament(true), 15000)
+    const interval = setInterval(() => fetchTournament(), 15000)
     return () => clearInterval(interval)
   }, [tournament, fetchTournament])
 
-  // ─── Computed ─────────────────────────────────────────────────────────────
+  // ─── Computed ──────────────────────────────────────────────────
 
   const filteredTeams = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.toLowerCase()
-    return teams.filter(t => t.name.toLowerCase().includes(q))
+    return teams.filter(t => t.name.toLowerCase().includes(q)).slice(0, 8)
   }, [teams, searchQuery])
+
+  const playingMatches = matches.filter(m => m.status === 'playing')
+  const tiedMatches = matches.filter(m => m.status === 'tied')
+
+  const nextMatches = useMemo(() => {
+    return matches
+      .filter(m => m.status === 'pending' && m.homeTeamId && m.awayTeamId)
+      .sort((a, b) => a.round - b.round || a.matchNumber - b.matchNumber)
+      .slice(0, 6)
+  }, [matches])
+
+  const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b)
+  const totalRounds = rounds.length > 0 ? rounds[rounds.length - 1] : 0
 
   const teamMatches = useMemo(() => {
     if (!selectedTeam) return []
     return matches.filter(m => m.homeTeamId === selectedTeam.id || m.awayTeamId === selectedTeam.id)
   }, [matches, selectedTeam])
 
-  const nextMatches = useMemo(() => {
-    return matches
-      .filter(m => m.status === 'pending' && m.homeTeamId && m.awayTeamId)
-      .sort((a, b) => a.round - b.round || a.matchNumber - b.matchNumber)
-      .slice(0, 8)
-  }, [matches])
-
-  const playingMatches = matches.filter(m => m.status === 'playing')
-  const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b)
-  const totalRounds = rounds.length > 0 ? rounds[rounds.length - 1] : 0
-
-  // ─── Share ───────────────────────────────────────────────────────────────
-
-  const getPublicLink = () => {
-    const base = typeof window !== 'undefined' ? window.location.origin : ''
-    return `${base}/t/${publicId}`
-  }
-
-  const shareWhatsApp = () => {
-    if (!tournament) return
-    const link = getPublicLink()
-    const text = encodeURIComponent(
-      `⚽ *${tournament.name}*\n\n` +
-      `📍 ${tournament.location}\n` +
-      `📅 ${new Date(tournament.date).toLocaleDateString('es-AR')}\n\n` +
-      `Seguí el torneo en vivo:\n${link}\n\n` +
-      `🔍 Buscá tu equipo para ver tus partidos!`
-    )
-    window.open(`https://wa.me/?text=${text}`, '_blank')
-  }
-
-  const shareGeneric = () => {
-    if (!tournament) return
-    const link = getPublicLink()
-    if (navigator.share) {
-      navigator.share({
-        title: tournament.name,
-        text: `Seguí el torneo en vivo: ${link}`,
-        url: link,
-      }).catch(() => {})
-    } else {
-      navigator.clipboard.writeText(link)
-      toast.success('Link copiado al portapapeles')
-    }
-  }
-
-  // ─── Loading / Error states ───────────────────────────────────────────────
+  // ─── Loading / Error ───────────────────────────────────────────
 
   if (loading) {
     return (
@@ -166,194 +107,223 @@ export default function PublicTournamentPage() {
         <Trophy className="h-16 w-16 text-emerald-600" />
         <h1 className="text-2xl font-bold text-white text-center">Torneo no encontrado</h1>
         <p className="text-emerald-400 text-center max-w-sm">
-          El link que usaste no corresponde a ningún torneo activo.
-          Verificá que el link esté bien o pedile uno nuevo al organizador.
+          El link no corresponde a ningún torneo activo. Verificá el link o pedile uno nuevo al organizador.
         </p>
         <a href="/" className="text-emerald-300 underline text-sm mt-4">Volver al inicio</a>
       </div>
     )
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-900 via-emerald-900 to-teal-950">
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-emerald-900 to-teal-950 pb-8">
       {/* Header */}
       <header className="border-b border-emerald-800 bg-emerald-950/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="max-w-2xl mx-auto px-4 py-3 space-y-2">
           <div className="flex items-center gap-3">
-            <a href={`/t/${publicId}`} className="flex-shrink-0">
-              <div className="bg-emerald-600 p-2 rounded-xl">
-                <Trophy className="h-6 w-6 text-white" />
-              </div>
-            </a>
+            <div className="bg-emerald-600 p-1.5 rounded-lg flex-shrink-0">
+              <Trophy className="h-5 w-5 text-white" />
+            </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg font-bold text-white truncate">{tournament.name}</h1>
+              <h1 className="text-white font-bold text-base truncate">{tournament.name}</h1>
               <div className="flex items-center gap-2 text-emerald-400 text-xs">
-                <MapPin className="h-3 w-3 flex-shrink-0" />
+                <MapPin className="h-3 w-3" />
                 <span className="truncate">{tournament.location}</span>
-                <span className="flex-shrink-0">&bull;</span>
-                <span className="flex-shrink-0">{new Date(tournament.date).toLocaleDateString('es-AR')}</span>
+                <span>&bull;</span>
+                <Users className="h-3 w-3" />
+                <span>{teams.length}</span>
               </div>
             </div>
-            <Button size="icon" variant="ghost" onClick={shareWhatsApp}
-              className="text-green-400 hover:text-green-300 flex-shrink-0" title="Compartir por WhatsApp">
-              <MessageCircle className="h-5 w-5" />
-            </Button>
-            <Button size="icon" variant="ghost" onClick={shareGeneric}
-              className="text-emerald-400 hover:text-white flex-shrink-0" title="Compartir link">
-              <Share2 className="h-5 w-5" />
-            </Button>
-            <Button size="icon" variant="ghost" onClick={() => fetchTournament(true)} disabled={refreshing}
-              className="text-emerald-400 hover:text-white flex-shrink-0">
-              {refreshing ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
-            </Button>
+            <button onClick={fetchTournament} className="text-emerald-400 hover:text-white p-1">
+              <RefreshCw className="h-4 w-4" />
+            </button>
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Status banner */}
-        {tournament.status === 'active' && (
-          <Card className={`border ${playingMatches.length > 0 ? 'bg-emerald-900/50 border-emerald-500' : 'bg-white/5 border-emerald-800'}`}>
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${playingMatches.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'}`} />
-              <div>
-                <p className="text-white font-bold">
-                  {playingMatches.length > 0 ? 'Torneo en curso' : 'Torneo activo - esperando partidos'}
-                </p>
-                <p className="text-emerald-300 text-sm">
-                  {playingMatches.length > 0
-                    ? `${playingMatches.length} partido(s) en juego ahora`
-                    : `${nextMatches.length} partido(s) pendientes`}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Quick stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <Card className="bg-white/10 backdrop-blur-sm border-emerald-700">
-            <CardContent className="p-3 text-center">
-              <Users className="h-4 w-4 text-emerald-400 mx-auto mb-1" />
-              <p className="text-xl font-bold text-white">{teams.length}</p>
-              <p className="text-emerald-400 text-xs">Equipos</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white/10 backdrop-blur-sm border-emerald-700">
-            <CardContent className="p-3 text-center">
-              <Check className="h-4 w-4 text-emerald-400 mx-auto mb-1" />
-              <p className="text-xl font-bold text-white">{matches.filter(m => m.status === 'finished' || m.status === 'walkover').length}</p>
-              <p className="text-emerald-400 text-xs">Jugados</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white/10 backdrop-blur-sm border-emerald-700">
-            <CardContent className="p-3 text-center">
-              <Clock className="h-4 w-4 text-emerald-400 mx-auto mb-1" />
-              <p className="text-xl font-bold text-white">{nextMatches.length}</p>
-              <p className="text-emerald-400 text-xs">Pendientes</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search team */}
-        <Card className="bg-white/10 backdrop-blur-sm border-emerald-700">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Search className="h-5 w-5 text-emerald-400" />
-              <h3 className="text-white font-semibold">Buscar mi equipo</h3>
-            </div>
-            <div className="relative">
-              <Input
-                placeholder="Escribe el nombre del equipo..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  if (selectedTeam) setSelectedTeam(null)
-                }}
-                className="bg-white/10 border-emerald-600 text-white placeholder:text-emerald-500 pl-4"
-              />
-            </div>
-
+          {/* Search - compact, always visible */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+            <Input
+              placeholder="Buscar equipo..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setSelectedTeam(null) }}
+              className="bg-white/10 border-emerald-600 text-white placeholder:text-emerald-500 pl-9 h-9 text-sm"
+            />
             {filteredTeams.length > 0 && (
-              <div className="space-y-1 max-h-40 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-emerald-950 border border-emerald-700 rounded-lg shadow-xl z-20 max-h-48 overflow-y-auto">
                 {filteredTeams.map(team => (
                   <button key={team.id}
                     onClick={() => { setSelectedTeam(team); setSearchQuery('') }}
-                    className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white text-sm transition-colors">
+                    className="w-full text-left px-3 py-2 text-white text-sm hover:bg-emerald-800 transition-colors">
                     {team.name}
                   </button>
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      </header>
 
+      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
         {/* Selected team info */}
         {selectedTeam && (
-          <TeamInfo
-            team={selectedTeam}
-            matches={teamMatches}
-            allMatches={matches}
-            courts={courts}
-            onDeselect={() => setSelectedTeam(null)}
-          />
+          <Card className="bg-emerald-900/50 border-emerald-600">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-white font-bold">{selectedTeam.name}</h3>
+                <button onClick={() => setSelectedTeam(null)} className="text-emerald-400 text-sm">X</button>
+              </div>
+              {teamMatches.length === 0 ? (
+                <p className="text-emerald-300 text-sm">Sin partidos todavía</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamMatches.map(match => (
+                    <div key={match.id} className="bg-white/5 rounded-lg p-3 text-sm">
+                      <div className="flex items-center justify-between text-white">
+                        <span>{match.homeTeam?.name}</span>
+                        <span className="font-mono font-bold">{match.homeGoals ?? '-'} - {match.awayGoals ?? '-'}</span>
+                        <span>{match.awayTeam?.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-emerald-400 text-xs mt-1">
+                        <span>{getRoundName(match.round, totalRounds)}</span>
+                        {match.court && <span>&bull; {match.court.name}</span>}
+                        <span className={`ml-auto ${
+                          match.status === 'playing' ? 'text-emerald-400' :
+                          match.status === 'finished' ? 'text-green-400' : 'text-yellow-400'
+                        }`}>
+                          {match.status === 'playing' ? 'EN JUEGO' :
+                           match.status === 'finished' ? 'FINALIZADO' :
+                           match.status === 'tied' ? 'EMPATE' :
+                           match.status === 'walkover' ? 'W.O.' : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
-        {/* Now playing */}
-        {playingMatches.length > 0 && (
+        {/* Ahora en Canchas */}
+        {courts.length > 0 && (
           <section>
             <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Play className="h-4 w-4" /> En Juego Ahora
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              Ahora en Canchas
             </h2>
             <div className="space-y-2">
-              {playingMatches.map(match => (
-                <PublicMatchCard key={match.id} match={match} courts={courts} />
-              ))}
+              {courts.map(court => {
+                const match = playingMatches.find(m => m.courtId === court.id) ||
+                              tiedMatches.find(m => m.courtId === court.id)
+                const isPenalties = court.type === 'penalties'
+                return (
+                  <Card key={court.id} className={`backdrop-blur-sm ${
+                    match ? (isPenalties ? 'bg-yellow-900/20 border-yellow-600' : 'bg-emerald-900/50 border-emerald-500') :
+                    'bg-white/5 border-emerald-800/50'
+                  }`}>
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isPenalties ? 'bg-yellow-600/20' : 'bg-emerald-600/20'
+                      }`}>
+                        {isPenalties ? <span className="text-yellow-400">⚽</span> : <Trophy className="h-5 w-5 text-emerald-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{court.name}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            match ? (isPenalties ? 'bg-yellow-600 text-white' : 'bg-emerald-600 text-white') :
+                            'bg-gray-600/30 text-gray-400'
+                          }`}>
+                            {match ? (isPenalties ? 'PENALES' : 'EN JUEGO') : 'LIBRE'}
+                          </span>
+                        </div>
+                        {match ? (
+                          <p className="text-white text-sm mt-0.5 font-medium">
+                            {match.homeTeam?.name} vs {match.awayTeam?.name}
+                          </p>
+                        ) : (
+                          <p className="text-gray-500 text-xs mt-0.5">Sin partido asignado</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           </section>
         )}
 
-        {/* Next matches */}
+        {/* En Juego ahora (partidos sin cancha asignada) */}
+        {playingMatches.filter(m => !m.courtId).length > 0 && (
+          <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3">
+            <p className="text-emerald-300 text-sm font-medium">
+              {playingMatches.filter(m => !m.courtId).length} partido(s) comenzaron sin cancha asignada
+            </p>
+          </div>
+        )}
+
+        {/* Próximos Partidos */}
         {nextMatches.length > 0 && (
           <section>
-            <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Clock className="h-4 w-4" /> Próximos Partidos
+            <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3">
+              Próximos Partidos
             </h2>
             <div className="space-y-2">
               {nextMatches.map(match => (
-                <PublicMatchCard key={match.id} match={match} courts={courts} />
+                <Card key={match.id} className="bg-white/10 backdrop-blur-sm border-emerald-700">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">
+                        {match.homeTeam?.name} vs {match.awayTeam?.name}
+                      </p>
+                      <p className="text-emerald-400 text-xs mt-0.5">
+                        {getRoundName(match.round, totalRounds)} &bull; #{match.matchNumber}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </section>
         )}
 
-        {/* Full bracket */}
-        <section>
-          <h2 className="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Trophy className="h-4 w-4" /> Cuadro de Llaves
-          </h2>
-          <div className="space-y-6">
-            {rounds.map(r => {
-              const roundMatches = matches.filter(m => m.round === r).sort((a, b) => a.matchNumber - b.matchNumber)
-              return (
-                <div key={r}>
-                  <h3 className="text-emerald-300 font-semibold text-xs uppercase tracking-wider mb-2">
-                    {getRoundName(r, totalRounds)}
-                  </h3>
-                  <div className="space-y-2">
-                    {roundMatches.map(match => (
-                      <PublicMatchCard key={match.id} match={match} courts={courts} />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+        {/* Cuadro de Llaves (acordeón) */}
+        {matches.length > 0 && (
+          <section>
+            <button
+              onClick={() => setShowBracket(!showBracket)}
+              className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 border border-emerald-700/50 rounded-lg px-4 py-3 transition-colors"
+            >
+              <span className="text-white font-semibold text-sm">Cuadro de Llaves</span>
+              {showBracket ? <ChevronUp className="h-4 w-4 text-emerald-400" /> : <ChevronDown className="h-4 w-4 text-emerald-400" />}
+            </button>
 
-        {/* Champion */}
+            {showBracket && (
+              <div className="mt-3 space-y-6">
+                {rounds.map(r => {
+                  const roundMatches = matches
+                    .filter(m => m.round === r)
+                    .sort((a, b) => a.matchNumber - b.matchNumber)
+                  return (
+                    <div key={r}>
+                      <h3 className="text-emerald-300 font-semibold text-xs uppercase tracking-wider mb-2">
+                        {getRoundName(r, totalRounds)}
+                      </h3>
+                      <div className="space-y-2">
+                        {roundMatches.map(match => (
+                          <BracketMatchCard key={match.id} match={match} courts={courts} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Champion banner */}
         {tournament.status === 'completed' && (() => {
           const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
           const champion = teams.find(t => t.id === finalMatch?.winnerId)
@@ -367,154 +337,71 @@ export default function PublicTournamentPage() {
             </Card>
           ) : null
         })()}
-
-        {/* Share banner at bottom */}
-        <Card className="bg-emerald-800/30 border-emerald-600/50">
-          <CardContent className="p-4 flex items-center gap-3">
-            <Share2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
-            <p className="text-emerald-300 text-sm flex-1">
-              Compartí este torneo con tus amigos
-            </p>
-            <Button size="sm" onClick={shareWhatsApp}
-              className="bg-green-600 hover:bg-green-500 text-white gap-1">
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp
-            </Button>
-          </CardContent>
-        </Card>
       </main>
-
-      {/* Footer */}
-      <footer className="mt-auto border-t border-emerald-800/50 bg-emerald-950/20 py-3 text-center">
-        <p className="text-emerald-600 text-xs">Torneos Relámpago &bull; Gestión Digital</p>
-      </footer>
     </div>
   )
 }
 
-// ─── Team Info Sub-Component ──────────────────────────────────────────────────
+// ─── Bracket Match Card ─────────────────────────────────────────
 
-function TeamInfo({ team, matches, allMatches, courts, onDeselect }: {
-  team: Team
-  matches: MatchWithDetails[]
-  allMatches: MatchWithDetails[]
-  courts: Court[]
-  onDeselect: () => void
-}) {
-  const currentMatch = matches.find(m => m.status === 'playing' || m.status === 'pending' || m.status === 'tied')
-  const pastMatches = matches.filter(m => m.status === 'finished' || m.status === 'walkover')
-  const wins = pastMatches.filter(m => m.winnerId === team.id).length
-  const losses = pastMatches.filter(m => m.winnerId !== team.id && m.status === 'finished').length
-
-  return (
-    <Card className="bg-emerald-900/30 border-emerald-600">
-      <CardContent className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-white font-bold text-lg">{team.name}</h3>
-          <Button size="sm" variant="ghost" onClick={onDeselect} className="text-emerald-400 hover:text-white">X</Button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-white/5 rounded-lg p-2 text-center">
-            <p className="text-white font-bold">{matches.length}</p>
-            <p className="text-emerald-400 text-xs">Partidos</p>
-          </div>
-          <div className="bg-green-600/10 rounded-lg p-2 text-center">
-            <p className="text-green-300 font-bold">{wins}</p>
-            <p className="text-green-400 text-xs">Ganados</p>
-          </div>
-          <div className="bg-red-600/10 rounded-lg p-2 text-center">
-            <p className="text-red-300 font-bold">{losses}</p>
-            <p className="text-red-400 text-xs">Perdidos</p>
-          </div>
-        </div>
-
-        {currentMatch && (
-          <div className="bg-emerald-600/20 rounded-lg p-3">
-            <p className="text-emerald-300 text-xs font-medium mb-1">PRÓXIMO / EN JUEGO</p>
-            <p className="text-white font-medium">
-              {currentMatch.homeTeam?.name || '???'} vs {currentMatch.awayTeam?.name || '???'}
-            </p>
-            <div className="flex items-center gap-3 mt-1 text-emerald-400 text-xs">
-              {currentMatch.courtId && courts.find(c => c.id === currentMatch.courtId) && (
-                <span>Cancha: {courts.find(c => c.id === currentMatch.courtId)!.name}</span>
-              )}
-              <span>Ronda {currentMatch.round}</span>
-            </div>
-          </div>
-        )}
-
-        {pastMatches.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-emerald-400 text-xs font-medium">HISTORIAL</p>
-            {pastMatches.map(match => (
-              <div key={match.id} className="bg-white/5 rounded-lg p-2 text-sm flex items-center justify-between">
-                <span className="text-white">
-                  vs {match.homeTeamId === team.id ? match.awayTeam?.name : match.homeTeam?.name}
-                </span>
-                <span className={`font-bold ${
-                  match.winnerId === team.id ? 'text-green-300' : 'text-red-300'
-                }`}>
-                  {match.homeTeamId === team.id ? `${match.homeGoals ?? 0}-${match.awayGoals ?? 0}` : `${match.awayGoals ?? 0}-${match.homeGoals ?? 0}`}
-                  {match.winnerId === team.id ? ' ✓' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─── Public Match Card Sub-Component ────────────────────────────────────────
-
-function PublicMatchCard({ match, courts }: { match: MatchWithDetails; courts: Court[] }) {
-  const [expanded, setExpanded] = useState(false)
-  const court = courts.find(c => c.id === match.courtId)
-  const isPlaying = match.status === 'playing'
+function BracketMatchCard({ match, courts }: { match: MatchWithDetails; courts: Court[] }) {
+  const isHomeWinner = match.winnerId === match.homeTeamId
+  const isAwayWinner = match.winnerId === match.awayTeamId
+  const isActive = match.status === 'playing'
   const isFinished = match.status === 'finished' || match.status === 'walkover'
+  const isBye = match.status === 'bye'
+
+  if (isBye) {
+    return (
+      <Card className="bg-purple-900/20 border-purple-700/50">
+        <CardContent className="p-3 text-center">
+          <p className="text-purple-300 text-sm font-medium">
+            BYE - {match.homeTeam?.name} avanza automáticamente
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
-    <Card className={`backdrop-blur-sm cursor-pointer ${
-      isPlaying ? 'bg-emerald-900/50 border-emerald-500' :
-      isFinished ? 'bg-white/5 border-green-800/50' :
-      'bg-white/10 border-emerald-700'
-    }`} onClick={() => setExpanded(!expanded)}>
-      <CardContent className="p-3">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 space-y-1">
-            <div className={`flex items-center justify-between text-sm ${
-              match.winnerId === match.homeTeamId ? 'text-green-300 font-bold' : 'text-white'
-            }`}>
-              <span className="truncate">{match.homeTeam?.name || '???'}</span>
-              <span className="font-mono font-bold w-8 text-right">{match.homeGoals ?? ''}</span>
-            </div>
-            <div className={`flex items-center justify-between text-sm ${
-              match.winnerId === match.awayTeamId ? 'text-green-300 font-bold' : 'text-white'
-            }`}>
-              <span className="truncate">{match.awayTeam?.name || '???'}</span>
-              <span className="font-mono font-bold w-8 text-right">{match.awayGoals ?? ''}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1">
-            {isPlaying && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
-            {court && (
-              <span className="text-emerald-400 text-xs">{court.name}</span>
+    <Card className={`backdrop-blur-sm ${
+      isActive ? 'bg-emerald-900/50 border-emerald-500 ring-1 ring-emerald-500/30' :
+      isFinished ? 'bg-white/5 border-green-800' :
+      match.homeTeamId && match.awayTeamId ? 'bg-white/10 border-emerald-700' :
+      'bg-white/5 border-emerald-700/50 opacity-60'
+    }`}>
+      <CardContent className="p-3 space-y-1">
+        <div className={`flex items-center justify-between px-2 py-1.5 rounded ${isHomeWinner ? 'bg-green-600/20' : ''}`}>
+          <span className={`text-sm ${isHomeWinner ? 'text-green-300 font-bold' : match.homeTeam ? 'text-white' : 'text-gray-500'}`}>
+            {match.homeTeam?.name || '???'}
+          </span>
+          <span className={`text-sm font-bold ${isHomeWinner ? 'text-green-300' : 'text-gray-400'}`}>
+            {match.homeGoals ?? ''}
+            {isHomeWinner && match.homePenalties !== null && (
+              <span className="text-yellow-300 text-xs ml-1">({match.homePenalties})</span>
             )}
-          </div>
+          </span>
         </div>
-
-        {expanded && (match.homePenalties !== null || match.awayPenalties !== null || isFinished) && (
-          <div className="mt-2 pt-2 border-t border-emerald-800/50 text-xs text-emerald-400 space-y-1">
-            {match.homePenalties !== null && (
-              <p>Penales: {match.homeTeam?.name} {match.homePenalties} - {match.awayPenalties} {match.awayTeam?.name}</p>
+        <div className="border-t border-emerald-800/50" />
+        <div className={`flex items-center justify-between px-2 py-1.5 rounded ${isAwayWinner ? 'bg-green-600/20' : ''}`}>
+          <span className={`text-sm ${isAwayWinner ? 'text-green-300 font-bold' : match.awayTeam ? 'text-white' : 'text-gray-500'}`}>
+            {match.awayTeam?.name || '???'}
+          </span>
+          <span className={`text-sm font-bold ${isAwayWinner ? 'text-green-300' : 'text-gray-400'}`}>
+            {match.awayGoals ?? ''}
+            {isAwayWinner && match.awayPenalties !== null && (
+              <span className="text-yellow-300 text-xs ml-1">({match.awayPenalties})</span>
             )}
-            {match.status === 'walkover' && (
-              <p className="text-red-400">Victoria por Walkover (W.O.)</p>
-            )}
+          </span>
+        </div>
+        {isActive && (
+          <div className="flex items-center justify-center gap-1 mt-1">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-emerald-400 text-xs">EN JUEGO</span>
           </div>
+        )}
+        {match.status === 'walkover' && (
+          <div className="text-center text-xs text-red-400 mt-1">W.O.</div>
         )}
       </CardContent>
     </Card>
