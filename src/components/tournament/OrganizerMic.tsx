@@ -3,7 +3,7 @@
 import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ArrowLeft, Mic, Volume2, Loader2, Trophy } from 'lucide-react'
+import { ArrowLeft, Mic, Volume2, Loader2, Trophy, ExternalLink } from 'lucide-react'
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -93,7 +93,16 @@ export default function OrganizerMic() {
               MODO MICRÓFONO
             </h1>
           </div>
-          <div className="text-right">
+          <div className="text-right flex items-center gap-2">
+            <Button size="sm" variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/t/${tournament?.publicId}/mic`)
+                toast.success('Link del micrófono copiado')
+              }}
+              className="border-red-600/50 text-red-400 hover:bg-red-900/30 h-8 text-xs">
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Link DJ
+            </Button>
             <p className="text-white text-xl font-mono font-bold">
               {now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
             </p>
