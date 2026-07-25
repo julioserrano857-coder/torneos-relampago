@@ -7,7 +7,7 @@ import { useTournamentStore } from '@/store/tournament-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell, ExternalLink } from 'lucide-react'
+import { Trophy, MapPin, Play, Square, Clock, Swords, Loader2, Zap, RefreshCw, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRoundName } from '@/lib/bracket-algorithm'
 import type { MatchWithDetails, MatchStatus, Court } from '@/lib/types'
@@ -276,15 +276,6 @@ export default function DashboardPage() {
           className="border-emerald-600 text-emerald-300 hover:bg-emerald-800">
           <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
           Actualizar
-        </Button>
-        <Button size="sm" variant="outline"
-          onClick={() => {
-            navigator.clipboard.writeText(`${window.location.origin}/t/${tournament?.publicId}/mic`)
-            toast.success('Link del micrófono copiado')
-          }}
-          className="border-red-600/50 text-red-400 hover:bg-red-900/30">
-          <ExternalLink className="h-4 w-4 mr-1" />
-          Mic
         </Button>
       </div>
 
