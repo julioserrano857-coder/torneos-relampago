@@ -39,10 +39,6 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMatch, setLoadingMatch] = useState<string | null>(null)
   const [selectedRound, setSelectedRound] = useState(1)
-  const [penaltyMatch, setPenaltyMatch] = useState<string | null>(null)
-  const [homePen, setHomePen] = useState('')
-  const [awayPen, setAwayPen] = useState('')
-  const [showPenaltyModal, setShowPenaltyModal] = useState(false)
 
   const { tournament, matches, courts, teams } = store
 
@@ -138,7 +134,7 @@ export default function DashboardPage() {
   const handleStartMatch = (match: MatchWithDetails, courtId?: string) => {
     const mainCourts = courts.filter(c => c.type === 'main')
     const freeCourt = courtId || mainCourts.find(c =>
-      !matches.some(m => m.courtId === c.id && m.status === 'playing')
+      !matches.some(m => m.courtId === c.id && (m.status === 'playing' || (m.status === 'tied' && c.type === 'main')))
     )?.id
 
     updateMatch(match.id, {
@@ -154,21 +150,9 @@ export default function DashboardPage() {
       return
     }
     if (match.homeGoals === match.awayGoals) {
-      if (match.homePenalties !== null && match.awayPenalties !== null) {
-        if (match.homePenalties === match.awayPenalties) {
-          toast.error('Los penales también están empatados')
-          return
-        }
-        const winnerId = match.homePenalties! > match.awayPenalties! ? match.homeTeamId : match.awayTeamId
-        updateMatch(match.id, {
-          status: 'finished', winnerId,
-          finishedAt: new Date().toISOString(), courtId: null,
-        })
-      } else {
-        updateMatch(match.id, { status: 'tied', courtId: null })
-        setPenaltyMatch(match.id)
-        setShowPenaltyModal(true)
-      }
+      // Empate → pasa a cola de penales, libera cancha
+      updateMatch(match.id, { status: 'tied', courtId: null })
+      toast.success('Partido empatado - pasa a cola de penales')
       return
     }
     const winnerId = match.homeGoals! > match.awayGoals! ? match.homeTeamId : match.awayTeamId
@@ -180,12 +164,10 @@ export default function DashboardPage() {
 
   const handleSetGoals = (matchId: string, field: 'homeGoals' | 'awayGoals', value: string) => {
     const num = value === '' ? null : parseInt(value) || 0
-    // Optimistic update: aplicamos el cambio local primero
     const currentMatch = matches.find(m => m.id === matchId)
     if (currentMatch) {
       store.updateMatch({ ...currentMatch, [field]: num })
     }
-    // Luego enviamos a la API en background
     fetch(`/api/matches/${matchId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -193,12 +175,7 @@ export default function DashboardPage() {
     }).catch(() => {})
   }
 
-  const handlePenalties = (match: MatchWithDetails) => {
-    if (!homePen || !awayPen) {
-      toast.error('Cargá los penales')
-      return
-    }
-    const hp = parseInt(homePen), ap = parseInt(awayPen)
+  const handlePenalties = (match: MatchWithDetails, hp: number, ap: number) => {
     if (hp === ap) { toast.error('Los penales no pueden ser iguales'); return }
     const winnerId = hp > ap ? match.homeTeamId : match.awayTeamId
     updateMatch(match.id, {
@@ -206,7 +183,6 @@ export default function DashboardPage() {
       status: 'finished', winnerId,
       finishedAt: new Date().toISOString(), courtId: null,
     })
-    setPenaltyMatch(null); setHomePen(''); setAwayPen(''); setShowPenaltyModal(false)
   }
 
   const handleWalkover = (match: MatchWithDetails, teamId: string) => {
@@ -227,9 +203,27 @@ export default function DashboardPage() {
     .sort((a, b) => a.matchNumber - b.matchNumber)
 
   const playingMatches = matches.filter(m => m.status === 'playing')
+  const penaltyCourtId = courts.find(c => c.type === 'penalties')?.id
 
-  const getPlayingMatch = (courtId: string) =>
-    playingMatches.find(m => m.courtId === courtId)
+  // Cola de penales: partidos empatados que no están en la cancha de penales
+  const penaltiesQueue = matches
+    .filter(m => m.status === 'tied' && (!penaltyCourtId || m.courtId !== penaltyCourtId))
+    .sort((a, b) => (a.updatedAt || '').localeCompare(b.updatedAt || ''))
+
+  // Partido actualmente en penales (asignado a la cancha de penales)
+  const playingPenalties = penaltyCourtId
+    ? matches.find(m => m.status === 'tied' && m.courtId === penaltyCourtId)
+    : null
+
+  const penaltyCourtFree = !playingPenalties
+
+  const getPlayingMatch = (courtId: string) => {
+    const court = courts.find(c => c.id === courtId)
+    if (court?.type === 'penalties') {
+      return playingPenalties || playingMatches.find(m => m.courtId === courtId)
+    }
+    return playingMatches.find(m => m.courtId === courtId)
+  }
 
   // ─── Empty / No tournament ──────────────────────────────────────
 
@@ -266,7 +260,7 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 py-4 space-y-3">
-      {/* Header compacto */}
+      {/* Header */}
       <div className="flex items-center gap-2">
         <Swords className="h-5 w-5 text-emerald-400 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -283,7 +277,7 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Barra de canchas compacta - una línea por cancha */}
+      {/* Barra de canchas */}
       <div className="space-y-1">
         {courts.filter(c => c.type === 'main').map(court => {
           const match = getPlayingMatch(court.id)
@@ -321,19 +315,47 @@ export default function DashboardPage() {
                   {match.homeTeam?.name} vs {match.awayTeam?.name}
                 </span>
               ) : (
-                <span className="text-yellow-400/60 flex-1 text-right">Libre</span>
+                <span className="text-yellow-400/60 flex-1 text-right">
+                  {penaltiesQueue.length > 0 ? `${penaltiesQueue.length} en cola` : 'Libre'}
+                </span>
               )}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                match ? 'bg-yellow-600 text-black' : 'bg-yellow-600/20 text-yellow-400'
+                match ? 'bg-yellow-600 text-black' : penaltiesQueue.length > 0 ? 'bg-yellow-600/30 text-yellow-300' : 'bg-yellow-600/20 text-yellow-400'
               }`}>
-                {match ? 'PENALES' : 'LIBRE'}
+                {match ? 'PENALES' : penaltiesQueue.length > 0 ? 'ESPERA' : 'LIBRE'}
               </span>
             </div>
           )
         })}
       </div>
 
-      {/* Pestañas de ronda - compactas */}
+      {/* Cola de penales */}
+      {penaltiesQueue.length > 0 && (
+        <div className="bg-yellow-900/15 border border-yellow-700/50 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-400 font-bold text-xs uppercase tracking-wider">Cola de Penales</span>
+            <span className="text-yellow-500 text-xs">({penaltiesQueue.length})</span>
+          </div>
+          {penaltiesQueue.map((m, i) => (
+            <div key={m.id} className="flex items-center gap-2">
+              <span className="text-yellow-500 text-[10px] w-4">{i + 1}.</span>
+              <span className="text-white text-xs flex-1 truncate">{m.homeTeam?.name} vs {m.awayTeam?.name}</span>
+              {penaltyCourtFree && i === 0 && (
+                <Button size="sm"
+                  onClick={() => {
+                    const penCourt = courts.find(c => c.type === 'penalties')
+                    if (penCourt) updateMatch(m.id, { courtId: penCourt.id })
+                  }}
+                  className="bg-yellow-600 hover:bg-yellow-500 text-black text-[10px] h-6 px-2 font-bold">
+                  Llamar
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pestañas de ronda */}
       <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
         {rounds.map(r => (
           <button key={r}
@@ -348,18 +370,19 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Cards de partidos - compactas */}
+      {/* Cards de partidos */}
       <div className="space-y-2">
         {roundMatches.map(match => (
           <CompactMatchCard
             key={match.id}
             match={match}
             courts={courts}
+            penaltyCourtId={penaltyCourtId}
             loading={loadingMatch === match.id}
             onStart={() => handleStartMatch(match)}
             onFinish={() => handleFinishMatch(match)}
             onSetGoals={(field, value) => handleSetGoals(match.id, field, value)}
-            onPenalties={() => { setPenaltyMatch(match.id); setShowPenaltyModal(true) }}
+            onPenalties={(hp, ap) => handlePenalties(match, hp, ap)}
             onWalkover={(teamId) => handleWalkover(match, teamId)}
             onReady={() => updateMatch(match.id, { status: 'ready' })}
           />
@@ -371,64 +394,21 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
-      {/* Penalty Modal - fixed bottom */}
-      {showPenaltyModal && penaltyMatch && (() => {
-        const m = matches.find(m => m.id === penaltyMatch)
-        if (!m) return null
-        return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowPenaltyModal(false)} />
-            <Card className="relative bg-yellow-900/95 border-yellow-600 backdrop-blur w-full sm:max-w-md mx-4 mb-4 sm:mb-0">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-yellow-300 font-bold flex items-center gap-2">
-                    <Zap className="h-5 w-5" /> Penales
-                  </h3>
-                  <button onClick={() => setShowPenaltyModal(false)} className="text-yellow-400 text-lg">✕</button>
-                </div>
-                <p className="text-yellow-200 text-sm text-center">{m.homeTeam?.name} vs {m.awayTeam?.name}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <p className="text-white text-sm mb-1">{m.homeTeam?.name}</p>
-                    <Input type="number" inputMode="numeric" min={0} value={homePen}
-                      onChange={e => setHomePen(e.target.value)}
-                      placeholder="0" className="bg-black/30 border-yellow-600 text-white text-center text-2xl h-14"
-                      onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-white text-sm mb-1">{m.awayTeam?.name}</p>
-                    <Input type="number" inputMode="numeric" min={0} value={awayPen}
-                      onChange={e => setAwayPen(e.target.value)}
-                      placeholder="0" className="bg-black/30 border-yellow-600 text-white text-center text-2xl h-14"
-                      onKeyDown={e => e.key === 'Enter' && handlePenalties(m)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button onClick={() => setShowPenaltyModal(false)}
-                    variant="outline" className="border-yellow-600 text-yellow-300">Cancelar</Button>
-                  <Button onClick={() => handlePenalties(m)}
-                    className="bg-yellow-600 hover:bg-yellow-500 text-white">Confirmar</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )
-      })()}
     </div>
   )
 }
 
 // ─── Compact Match Card ───────────────────────────────────────────
 
-function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoals, onPenalties, onWalkover, onReady }: {
+function CompactMatchCard({ match, courts, penaltyCourtId, loading, onStart, onFinish, onSetGoals, onPenalties, onWalkover, onReady }: {
   match: MatchWithDetails
   courts: { id: string; name: string; type: string }[]
+  penaltyCourtId?: string
   loading: boolean
   onStart: () => void
   onFinish: () => void
   onSetGoals: (field: 'homeGoals' | 'awayGoals', value: string) => void
-  onPenalties: () => void
+  onPenalties: (hp: number, ap: number) => void
   onWalkover: (teamId: string) => void
   onReady: () => void
 }) {
@@ -440,6 +420,10 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
   const isBye = match.status === 'bye'
   const isHomeWinner = match.winnerId === match.homeTeamId
   const isAwayWinner = match.winnerId === match.awayTeamId
+  const isAtPenalties = isTied && penaltyCourtId && match.courtId === penaltyCourtId
+
+  const [homePen, setHomePen] = useState('')
+  const [awayPen, setAwayPen] = useState('')
 
   if (isBye) {
     return (
@@ -459,11 +443,11 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
       'bg-white/10 border-emerald-700/50'
     }`}>
       <div className="p-3 space-y-2">
-        {/* Header: match number + status */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <span className="text-emerald-400 text-[10px] font-medium">#{match.matchNumber}</span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[match.status]}`}>
-            {STATUS_LABELS[match.status]}
+            {isAtPenalties ? 'PENALES' : STATUS_LABELS[match.status]}
           </span>
         </div>
 
@@ -474,7 +458,7 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
             <span className={`flex-1 text-sm font-medium ${isHomeWinner ? 'text-green-300' : match.homeTeam?.name ? 'text-white' : 'text-gray-500'}`}>
               {match.homeTeam?.name || '???'}
             </span>
-            {(isPending || isPlaying || isTied) && match.homeTeam && (
+            {(isPending || isPlaying) && match.homeTeam && (
               <div className="flex items-center gap-1">
                 <button onClick={() => onSetGoals('homeGoals', String(Math.max(0, (match.homeGoals || 0) - 1)))}
                   className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">-</button>
@@ -486,6 +470,13 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
             {isFinished && (
               <span className="text-white font-bold text-base w-16 text-right">{match.homeGoals ?? '-'}</span>
             )}
+            {isAtPenalties && (
+              <div className="flex items-center gap-1">
+                <input type="number" inputMode="numeric" min={0} value={homePen}
+                  onChange={e => setHomePen(e.target.value)}
+                  className="w-12 h-8 bg-black/30 border border-yellow-600 rounded text-center text-white font-bold text-sm" />
+              </div>
+            )}
           </div>
 
           {/* Away */}
@@ -493,7 +484,7 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
             <span className={`flex-1 text-sm font-medium ${isAwayWinner ? 'text-green-300' : match.awayTeam?.name ? 'text-white' : 'text-gray-500'}`}>
               {match.awayTeam?.name || '???'}
             </span>
-            {(isPending || isPlaying || isTied) && match.awayTeam && (
+            {(isPending || isPlaying) && match.awayTeam && (
               <div className="flex items-center gap-1">
                 <button onClick={() => onSetGoals('awayGoals', String(Math.max(0, (match.awayGoals || 0) - 1)))}
                   className="w-6 h-6 rounded bg-white/10 text-white text-sm flex items-center justify-center hover:bg-white/20">-</button>
@@ -505,10 +496,17 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
             {isFinished && (
               <span className="text-white font-bold text-base w-16 text-right">{match.awayGoals ?? '-'}</span>
             )}
+            {isAtPenalties && (
+              <div className="flex items-center gap-1">
+                <input type="number" inputMode="numeric" min={0} value={awayPen}
+                  onChange={e => setAwayPen(e.target.value)}
+                  className="w-12 h-8 bg-black/30 border border-yellow-600 rounded text-center text-white font-bold text-sm" />
+              </div>
+            )}
           </div>
 
           {/* Penales indicator */}
-          {(isFinished || isTied) && match.homePenalties !== null && match.awayPenalties !== null && (
+          {(isFinished || isTied) && match.homePenalties !== null && match.awayPenalties !== null && !isAtPenalties && (
             <div className="text-center text-[10px] text-yellow-300">
               Penales: {match.homeTeam?.name} {match.homePenalties} — {match.awayPenalties} {match.awayTeam?.name}
             </div>
@@ -559,10 +557,15 @@ function CompactMatchCard({ match, courts, loading, onStart, onFinish, onSetGoal
           </Button>
         )}
 
-        {isTied && (
-          <Button onClick={onPenalties}
-            className="w-full bg-yellow-600 hover:bg-yellow-500 text-white py-4 text-sm">
-            <Zap className="h-4 w-4 mr-2" /> Definición por Penales
+        {isAtPenalties && (
+          <Button onClick={() => {
+            const hp = parseInt(homePen), ap = parseInt(awayPen)
+            if (isNaN(hp) || isNaN(ap)) { toast.error('Cargá los penales de ambos equipos'); return }
+            onPenalties(hp, ap)
+          }} disabled={loading}
+            className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-4 text-sm">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+            Confirmar Resultado de Penales
           </Button>
         )}
 
